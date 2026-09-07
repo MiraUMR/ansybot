@@ -1,0 +1,15 @@
+# 模型优先级示例。复制为 data/llm_pools.yaml 后按需调整顺序。
+# 越靠前越优先；失败自动切下一个。
+
+max_failover: 8
+vision_fallback_to_text: true
+
+text:
+  - deepseek-v4-flash-0731
+  - qwen-plus
+  - qwen-flash
+
+vision:
+  - qwen3-vl-plus
+  - qwen3-vl-flash
+  - qwen-vl-plus

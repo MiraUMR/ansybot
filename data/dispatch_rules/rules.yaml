@@ -1,0 +1,847 @@
+- rule_id: chat_anon_mention
+  name: 爱音·被@或/chat
+  description: 爱音侧被 @ 或 /chat 必回
+  workflow_id: chat:anon
+  priority: 5
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+    - type: im_adapter
+      config:
+        im_name: qq_official_bot
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /chat
+    - type: bot_mention
+      config: {}
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+  - operator: and
+    rules:
+    - type: not_only_at_peer
+      config:
+        character: anon
+    - type: sender_not_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.85
+- rule_id: chat_anon_peer
+  name: 爱音·同伴入站
+  description: 素世号对爱音点名/@，或连环未冷却时续聊
+  workflow_id: chat:anon
+  priority: 6
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+    - type: im_adapter
+      config:
+        im_name: qq_official_bot
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: peer_inbound
+      config:
+        character: anon
+    - type: not_only_at_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_group_random_suisomi_mygo_anon
+  name: 素爱素群·MyGO相关插话（爱音）
+  description: 群 1035893116 MyGO 相关未 @ 约 1% 接话
+  workflow_id: chat:anon
+  priority: 4
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1035893116'
+    - type: keyword
+      config:
+        keywords:
+        - 千早爱音
+        - 爱音
+        - Anon
+        - anon
+        - あのん
+        - Chihaya
+        - 长崎素世
+        - 素世
+        - soyorin
+        - Soyorin
+        - 素世世
+        - soyo
+        - 高松灯
+        - tomorin
+        - Tomorin
+        - 椎名立希
+        - 立希
+        - rikki
+        - Rikki
+        - 要乐奈
+        - 乐奈
+        - 樂奈
+        - MyGO
+        - mygo
+        - MYGO
+        - 春日影
+        - 迷星叫
+        - Anon Tokyo
+        - 爱音东京
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: anon
+    - type: not_at_others
+      config:
+        character: anon
+    - type: sender_not_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_group_random_suisomi_other_anon
+  name: 素爱素群·其它闲聊插话（爱音）
+  description: 群 1035893116 其它闲聊未 @ 约 1% 接话
+  workflow_id: chat:anon
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1035893116'
+    - type: keyword_mismatch
+      config:
+        keywords:
+        - 千早爱音
+        - 爱音
+        - Anon
+        - anon
+        - あのん
+        - Chihaya
+        - 长崎素世
+        - 素世
+        - soyorin
+        - Soyorin
+        - 素世世
+        - soyo
+        - 高松灯
+        - tomorin
+        - Tomorin
+        - 椎名立希
+        - 立希
+        - rikki
+        - Rikki
+        - 要乐奈
+        - 乐奈
+        - 樂奈
+        - MyGO
+        - mygo
+        - MYGO
+        - 春日影
+        - 迷星叫
+        - Anon Tokyo
+        - 爱音东京
+    - type: regex
+      config:
+        pattern: '[一-龥A-Za-z]{4,}'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: anon
+    - type: not_at_others
+      config:
+        character: anon
+    - type: sender_not_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_group_random_nonggong_anon
+  name: 农工群偶尔插话（爱音）
+  description: 群 1071033510 未 @ 约 1% 接话
+  workflow_id: chat:anon
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1071033510'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: anon
+    - type: not_at_others
+      config:
+        character: anon
+    - type: sender_not_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_group_random_1002331691_anon
+  name: 群1002331691偶尔插话（爱音）
+  description: 群 1002331691 未 @ 约 1% 接话
+  workflow_id: chat:anon
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1002331691'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: anon
+    - type: not_at_others
+      config:
+        character: anon
+    - type: sender_not_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_group_random_1092692457_anon
+  name: 群1092692457偶尔插话（爱音）
+  description: 群 1092692457 未 @ 约 1% 接话
+  workflow_id: chat:anon
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1092692457'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: anon
+    - type: not_at_others
+      config:
+        character: anon
+    - type: sender_not_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_anon_private
+  name: 爱音·私聊
+  workflow_id: chat:anon
+  priority: 5
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+    - type: im_adapter
+      config:
+        im_name: qq_official_bot
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 私聊
+  - operator: and
+    rules:
+    - type: not_only_at_peer
+      config:
+        character: anon
+    - type: sender_not_peer
+      config:
+        character: anon
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_soyo_mention
+  name: 素世·被@或/chat
+  workflow_id: chat:soyo
+  priority: 5
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /chat
+    - type: bot_mention
+      config: {}
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+  - operator: and
+    rules:
+    - type: not_only_at_peer
+      config:
+        character: soyo
+    - type: sender_not_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.85
+- rule_id: chat_soyo_peer
+  name: 素世·同伴入站
+  description: 爱音号对素世点名/@，或连环未冷却时续聊
+  workflow_id: chat:soyo
+  priority: 6
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: peer_inbound
+      config:
+        character: soyo
+    - type: not_only_at_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_group_random_suisomi_mygo_soyo
+  name: 素爱素群·MyGO相关插话（素世）
+  workflow_id: chat:soyo
+  priority: 4
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1035893116'
+    - type: keyword
+      config:
+        keywords:
+        - 千早爱音
+        - 爱音
+        - Anon
+        - anon
+        - あのん
+        - Chihaya
+        - 长崎素世
+        - 素世
+        - soyorin
+        - Soyorin
+        - 素世世
+        - soyo
+        - 高松灯
+        - tomorin
+        - Tomorin
+        - 椎名立希
+        - 立希
+        - rikki
+        - Rikki
+        - 要乐奈
+        - 乐奈
+        - 樂奈
+        - MyGO
+        - mygo
+        - MYGO
+        - 春日影
+        - 迷星叫
+        - Anon Tokyo
+        - 爱音东京
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: soyo
+    - type: not_at_others
+      config:
+        character: soyo
+    - type: sender_not_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+  description: 群 1035893116 MyGO 相关未 @ 约 1% 接话
+- rule_id: chat_group_random_suisomi_other_soyo
+  name: 素爱素群·其它闲聊插话（素世）
+  workflow_id: chat:soyo
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1035893116'
+    - type: keyword_mismatch
+      config:
+        keywords:
+        - 千早爱音
+        - 爱音
+        - Anon
+        - anon
+        - あのん
+        - Chihaya
+        - 长崎素世
+        - 素世
+        - soyorin
+        - Soyorin
+        - 素世世
+        - soyo
+        - 高松灯
+        - tomorin
+        - Tomorin
+        - 椎名立希
+        - 立希
+        - rikki
+        - Rikki
+        - 要乐奈
+        - 乐奈
+        - 樂奈
+        - MyGO
+        - mygo
+        - MYGO
+        - 春日影
+        - 迷星叫
+        - Anon Tokyo
+        - 爱音东京
+    - type: regex
+      config:
+        pattern: '[一-龥A-Za-z]{4,}'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: soyo
+    - type: not_at_others
+      config:
+        character: soyo
+    - type: sender_not_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+  description: 群 1035893116 其它闲聊未 @ 约 1% 接话
+- rule_id: chat_group_random_nonggong_soyo
+  name: 农工群偶尔插话（素世）
+  workflow_id: chat:soyo
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1071033510'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: soyo
+    - type: not_at_others
+      config:
+        character: soyo
+    - type: sender_not_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+  description: 群 1071033510 未 @ 约 1% 接话
+- rule_id: chat_group_random_1002331691_soyo
+  name: 群1002331691偶尔插话（素世）
+  description: 群 1002331691 未 @ 约 1% 接话
+  workflow_id: chat:soyo
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1002331691'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: soyo
+    - type: not_at_others
+      config:
+        character: soyo
+    - type: sender_not_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_group_random_1092692457_soyo
+  name: 群1092692457偶尔插话（素世）
+  description: 群 1092692457 未 @ 约 1% 接话
+  workflow_id: chat:soyo
+  priority: 3
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: and
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+    - type: sender
+      config:
+        sender_id: ''
+        sender_group: '1092692457'
+    - type: random
+      config:
+        chance: 1
+    - type: not_only_at_peer
+      config:
+        character: soyo
+    - type: not_at_others
+      config:
+        character: soyo
+    - type: sender_not_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: chat_soyo_private
+  name: 素世·私聊
+  workflow_id: chat:soyo
+  priority: 5
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 私聊
+  - operator: and
+    rules:
+    - type: not_only_at_peer
+      config:
+        character: soyo
+    - type: sender_not_peer
+      config:
+        character: soyo
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+- rule_id: system_help
+  name: 帮助命令
+  workflow_id: system:help
+  priority: 10
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /help
+  metadata:
+    category: system
+    permission: user
+- rule_id: system_clear_memory
+  name: 清空记忆
+  workflow_id: system:clear_memory
+  priority: 10
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /清空记忆
+  metadata:
+    category: system
+    permission: user
+- rule_id: system_world_state
+  name: 长期记忆
+  description: 查看或修改本群长期设定（按来源适配器对应角色）
+  workflow_id: system:world_state
+  priority: 10
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /长期记忆
+    - type: prefix
+      config:
+        prefix: /world
+  metadata:
+    category: system
+    permission: user
+- rule_id: fallback_anon
+  name: 默认规则（爱音记忆）
+  workflow_id: chat:memory_store_anon
+  priority: 0
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_user_bot
+    - type: im_adapter
+      config:
+        im_name: qq_official_bot
+  - operator: or
+    rules:
+    - type: fallback
+      config: {}
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata: {}
+- rule_id: fallback_soyo
+  name: 默认规则（素世记忆）
+  workflow_id: chat:memory_store_soyo
+  priority: 0
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_soyo
+  - operator: or
+    rules:
+    - type: fallback
+      config: {}
+  - operator: and
+    rules:
+    - type: children_ok
+      config: {}
+  metadata: {}

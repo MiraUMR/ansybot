@@ -1,0 +1,10 @@
+# 儿童模式：名单内 QQ 必须间隔指定分钟才读取并回复（含 @）
+# 改完约几秒内生效，无需重启。也可在网页 /qqbot/children-mode 管理。
+
+enabled: true
+default_interval_minutes: 30
+users:
+  - qq: "2513158271"
+    interval_minutes: 30
+  - qq: "2174256051"
+    interval_minutes: 30

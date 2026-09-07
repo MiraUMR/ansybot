@@ -1,0 +1,51 @@
+# 双角色登记（IM / 工作流 / 别名）。
+# 同伴身份与 QQ 绑定写在角色人设 base 的【同伴绑定】```peer 块里，改人设即改分流。
+characters:
+  anon:
+    display: 千早爱音
+    im_name: qq_user_bot
+    qq: "3845655536"
+    workflow: chat:anon
+    memory_scope: anon_group
+    aliases:
+    - 千早爱音
+    - 小爱音
+    - 爱音
+    - Anon
+    - anon
+    - あのん
+    - anonrin
+  soyo:
+    display: 长崎素世
+    im_name: qq_soyo
+    qq: "2246246527"
+    workflow: chat:soyo
+    memory_scope: soyo_group
+    aliases:
+    - 长崎素世
+    - 素世
+    - soyorin
+    - Soyorin
+    - 素世世
+    - soyo
+    - そよ
+
+# 同伴互聊轮次（身份绑定见各角色人设 base）
+peer:
+  max_rounds: 3
+  cooldown_seconds: 180
+  chain_ttl_seconds: 600
+
+# 沉浸式 RP：人类未 @ → 环境旁白；记忆入库可认 characters.*.qq / 人设绑定 QQ
+immersion:
+  enabled: true
+  # 仅用于记忆/抽取白名单补充；不能因此获得同伴互聊资格
+  extra_bot_qqs: []
+  short_text_max_len: 4
+  scene_buffer_max: 5
+  narration_llm_min_len: 12
+  narration_model: ""
+  discard_only_emoji: true
+  env_reply_chance: 100
+  # 环境随机闲聊时约 40% 可 @/点名同伴续聊（受 peer.max_rounds / cooldown 约束）
+  env_peer_ping_chance: 40

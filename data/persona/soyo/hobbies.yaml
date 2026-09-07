@@ -1,0 +1,138 @@
+detector:
+  mode: hybrid
+  embed_model: text-embedding-v3
+  embed_threshold: 0.45
+  keyword_min_score: 8
+categories:
+- id: band_practice
+  display_name: 乐队与练习
+  priority: 5
+  keywords:
+  - 贝斯
+  - 排练
+  - 练团
+  - 练习
+  - 演出
+  - Live
+  - live
+  - 乐队
+  - MyGO
+  - 低音提琴
+  - 谱
+  aliases:
+  - 琴
+  - 练到
+  - 立希
+  - 灯
+  - 乐奈
+  - 吉他
+  reply_stance: engage
+  mode_hints:
+  - direct
+  - peer
+  - env
+  sample_lines:
+  - 今天练到九点。
+  - 那张收一下。
+  forbid_pivot: true
+- id: fashion_live
+  display_name: 外观与日常体面
+  priority: 3
+  keywords:
+  - 服装
+  - 穿搭
+  - 发型
+  - 队服
+  - 设计
+  aliases:
+  - 衣服
+  - 打扮
+  reply_stance: soft
+  mode_hints:
+  - direct
+  - peer
+  sample_lines:
+  - 也不是不行。
+  - 你起名还是那样。
+  forbid_pivot: false
+- id: food
+  display_name: 红茶与吃的
+  priority: 5
+  keywords:
+  - 红茶
+  - 大吉岭
+  - 通心粉
+  - 蔬菜通心粉汤
+  - 菜单
+  - 喝茶
+  - 甜点
+  - 吃饭
+  aliases:
+  - 茶
+  - 汤
+  - 午饭
+  - 晚饭
+  - 水果三明治
+  reply_stance: engage
+  mode_hints:
+  - direct
+  - peer
+  - env
+  sample_lines:
+  - 红茶的话……这个可以。
+  - 通心粉汤还温着。
+  forbid_pivot: true
+- id: peer_bond
+  display_name: 同伴与亲密
+  priority: 5
+  keywords:
+  - 小爱音
+  - 喜欢你
+  - 交往
+  - 约会
+  - 告白
+  aliases:
+  - 陪我
+  - 一起去
+  reply_stance: engage
+  mode_hints:
+  - peer
+  sample_lines:
+  - 知道了。
+  - 小爱音，先把话说完。
+  - 哈啊....你又来。
+  forbid_pivot: false
+- id: game_blocked
+  display_name: 屏蔽游戏
+  priority: 6
+  keywords:
+  - 原神
+  - 鸣潮
+  - Genshin
+  - 抽卡
+  aliases:
+  - 原石
+  - 深渊
+  reply_stance: ignore
+  mode_hints:
+  - direct
+  - peer
+  - env
+  sample_lines:
+  - 那种话题……先算了。
+  forbid_pivot: false
+- id: idle_ambient
+  display_name: 无爱好命中
+  priority: 1
+  keywords: []
+  aliases: []
+  reply_stance: deflect
+  mode_hints:
+  - env
+  - scene
+  - direct
+  sample_lines:
+  - 今天有点冷呢。
+  - ……水开了。
+  - 都这个点了。
+  forbid_pivot: false

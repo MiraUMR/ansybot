@@ -1,0 +1,31 @@
+story_triggers:
+  start_patterns:
+    - pattern: "@{soyo} @{aono} 去逛庙会"
+      bots: ["soyo", "anon"]
+    - pattern: "@{soyo} 开始故事"
+      bots: ["soyo"]
+    - pattern: "@{aono} 夏日祭典"
+      bots: ["anon"]
+    - pattern: "@{soyo} @{aono} 一起去看live"
+      bots: ["soyo", "anon"]
+  start_keywords:
+    - 开始故事
+    - 故事开始
+    - 进入故事
+  start_scenes:
+    - 逛庙会
+    - 去逛庙会
+    - 夏日祭典
+    - 夏日祭
+    - 一起去看live
+    - 去看live
+    - 看live
+  end_commands:
+    - "@{bot_name} end"
+    - "@{bot_name} 结束"
+    - "@{bot_name} stop"
+  end_tokens:
+    - end
+    - 结束
+    - stop
+  guide_prefix: "@{bot_name}"

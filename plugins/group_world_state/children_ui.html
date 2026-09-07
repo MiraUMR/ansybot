@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>儿童模式</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --bg: #fff;
+      --card: #f6f8fa; --accent: #0969da; --danger: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #e6edf3; --muted: #8b949e; --line: #30363d; --bg: #0d1117;
+        --card: #161b22; --accent: #2f81f7; --danger: #f85149;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+    header { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    h1 { font-size: 18px; margin: 0; font-weight: 600; }
+    .muted { color: var(--muted); }
+    main { padding: 20px; max-width: 820px; }
+    .card { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 14px; margin: 0 0 16px; }
+    button, input { font: inherit; }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+      padding: 6px 12px; cursor: pointer;
+    }
+    button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+    button.danger { background: var(--danger); }
+    input[type="text"], input[type="number"] {
+      padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+      background: var(--bg); color: inherit;
+    }
+    .row { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; align-items: center; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+    .blocked { color: var(--danger); }
+    #err { color: var(--danger); margin: 0 20px; min-height: 1.2em; }
+    #ok { color: #1a7f37; margin: 0 20px; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>儿童模式</h1>
+    <span class="muted">名单内 QQ 必须间隔指定分钟才读取并回复，@ 也一样。改完保存即可，无需重启。</span>
+    <button type="button" id="reloadBtn" class="ghost">刷新</button>
+    <button type="button" id="saveBtn">保存</button>
+  </header>
+  <p id="err"></p>
+  <p id="ok"></p>
+  <main>
+    <div class="card">
+      <div class="row">
+        <label><input type="checkbox" id="enabled" /> 启用儿童模式</label>
+      </div>
+      <div class="row">
+        <span>默认间隔（分钟）</span>
+        <input type="number" id="defaultMinutes" min="1" step="1" style="width:96px" />
+      </div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <input type="text" id="newQq" placeholder="QQ 号，例如 2513158271" style="flex:1;min-width:200px" />
+        <input type="number" id="newMinutes" min="1" step="1" placeholder="分钟" style="width:96px" />
+        <button type="button" id="addBtn">添加</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>QQ</th><th>间隔（分钟）</th><th>状态</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+  <script>
+    function getToken() {
+      const q = new URLSearchParams(location.search).get("auth_token");
+      if (q) {
+        try { localStorage.setItem("token", q); } catch (e) {}
+        return q;
+      }
+      return localStorage.getItem("token") || "";
+    }
+    function apiBase() {
+      if (location.pathname.includes("/backend-api/api/children-mode")) {
+        return location.pathname.replace(/\/ui\/?$/, "");
+      }
+      const prefix = location.pathname.startsWith("/qqbot/") ? "/qqbot" : "";
+      return prefix + "/backend-api/api/children-mode";
+    }
+    const err = document.getElementById("err");
+    const ok = document.getElementById("ok");
+    let state = { enabled: true, default_interval_minutes: 30, users: [] };
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+      const token = getToken();
+      let url = apiBase() + path;
+      if (token) {
+        headers.Authorization = "Bearer " + token;
+        url += (url.includes("?") ? "&" : "?") + "auth_token=" + encodeURIComponent(token);
+      }
+      const res = await fetch(url, Object.assign({}, opts, { headers }));
+      if (res.status === 401) throw new Error("请先打开 Kirara WebUI 登录，再回来刷新本页。");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    function showError(e) { err.textContent = e && e.message ? e.message : String(e || ""); ok.textContent = ""; }
+    function showOk(msg) { ok.textContent = msg || ""; err.textContent = ""; }
+
+    function fmtRemain(sec) {
+      sec = Math.max(0, Number(sec) || 0);
+      if (!sec) return "可读取";
+      const m = Math.ceil(sec / 60);
+      return "冷却中，约 " + m + " 分钟";
+    }
+
+    function render() {
+      document.getElementById("enabled").checked = !!state.enabled;
+      document.getElementById("defaultMinutes").value = state.default_interval_minutes || 30;
+      const body = document.getElementById("rows");
+      body.innerHTML = "";
+      (state.users || []).forEach((u, i) => {
+        const tr = document.createElement("tr");
+        const blocked = !!u.blocked;
+        tr.innerHTML =
+          "<td></td><td></td><td></td><td></td>";
+        tr.cells[0].textContent = u.qq;
+        const mins = document.createElement("input");
+        mins.type = "number";
+        mins.min = "1";
+        mins.value = u.interval_minutes || state.default_interval_minutes;
+        mins.style.width = "96px";
+        mins.onchange = () => { state.users[i].interval_minutes = Math.max(1, parseInt(mins.value, 10) || 1); };
+        tr.cells[1].appendChild(mins);
+        tr.cells[2].textContent = blocked ? fmtRemain(u.remaining_seconds) : "可读取";
+        tr.cells[2].className = blocked ? "blocked" : "muted";
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "danger";
+        del.textContent = "移除";
+        del.onclick = () => { state.users.splice(i, 1); render(); };
+        tr.cells[3].appendChild(del);
+        body.appendChild(tr);
+      });
+      if (!(state.users || []).length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = '<td colspan="4" class="muted">名单为空，儿童模式不会限流任何人。</td>';
+        body.appendChild(tr);
+      }
+    }
+
+    async function reload() {
+      const data = await api("/config");
+      state.enabled = !!data.enabled;
+      state.default_interval_minutes = data.default_interval_minutes || 30;
+      state.users = Array.isArray(data.users) ? data.users.slice() : [];
+      render();
+      showOk("已加载 " + state.users.length + " 个账号");
+    }
+
+    async function save() {
+      const payload = {
+        enabled: document.getElementById("enabled").checked,
+        default_interval_minutes: Math.max(1, parseInt(document.getElementById("defaultMinutes").value, 10) || 30),
+        users: (state.users || []).map((u) => ({
+          qq: String(u.qq || "").trim(),
+          interval_minutes: Math.max(1, parseInt(u.interval_minutes, 10) || 1),
+        })),
+      };
+      const data = await api("/config", { method: "PUT", body: JSON.stringify(payload) });
+      state.enabled = !!data.enabled;
+      state.default_interval_minutes = data.default_interval_minutes || 30;
+      state.users = Array.isArray(data.users) ? data.users.slice() : [];
+      render();
+      showOk("已保存");
+    }
+
+    document.getElementById("addBtn").onclick = () => {
+      const qq = document.getElementById("newQq").value.trim();
+      if (!/^\d+$/.test(qq)) {
+        showError(new Error("请输入数字 QQ 号"));
+        return;
+      }
+      if ((state.users || []).some((u) => u.qq === qq)) {
+        showError(new Error("该 QQ 已在名单中"));
+        return;
+      }
+      const minutes = Math.max(1, parseInt(document.getElementById("newMinutes").value, 10) || state.default_interval_minutes || 30);
+      state.users.push({ qq, interval_minutes: minutes, blocked: false, remaining_seconds: 0 });
+      document.getElementById("newQq").value = "";
+      render();
+    };
+    document.getElementById("reloadBtn").onclick = () => reload().catch(showError);
+    document.getElementById("saveBtn").onclick = () => save().catch(showError);
+    reload().catch(showError);
+  </script>
+</body>
+</html>

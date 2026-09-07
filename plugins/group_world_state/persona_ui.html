@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>角色人设</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --bg: #fff;
+      --card: #f6f8fa; --accent: #0969da; --danger: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #e6edf3; --muted: #8b949e; --line: #30363d; --bg: #0d1117;
+        --card: #161b22; --accent: #2f81f7; --danger: #f85149;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+    header {
+      padding: 12px 16px; border-bottom: 1px solid var(--line);
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    h1 { font-size: 18px; margin: 0; font-weight: 600; }
+    .muted { color: var(--muted); }
+    button, textarea, input, select { font: inherit; }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+      padding: 6px 12px; cursor: pointer;
+    }
+    button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tab, .mod {
+      background: transparent; color: var(--fg); border: 1px solid var(--line);
+      border-radius: 999px; padding: 4px 12px;
+    }
+    .tab.active, .mod.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    main { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 57px); }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+    aside { border-right: 1px solid var(--line); padding: 12px; background: var(--card); overflow: auto; }
+    article { padding: 16px 20px; display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+    textarea#editor {
+      width: 100%; flex: 1; min-height: 420px; padding: 12px;
+      border: 1px solid var(--line); border-radius: 8px;
+      background: var(--bg); color: var(--fg); resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; line-height: 1.55;
+    }
+    .mod { width: 100%; text-align: left; border-radius: 8px; margin: 0 0 6px; }
+    .mod small { display: block; color: inherit; opacity: .8; font-weight: 400; }
+    #err { color: var(--danger); margin: 0 16px; min-height: 1.2em; }
+    #ok { color: #1a7f37; margin: 0 16px; min-height: 1.2em; }
+    .meta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
+    #pageNote, #modHint {
+      margin: 0 16px 8px; color: var(--muted); font-size: 13px; max-width: 920px;
+    }
+    #modHint { margin: 0 0 10px; padding: 8px 10px; background: var(--card); border-radius: 8px; }
+    .aside-h { margin: 14px 0 6px; font-size: 12px; color: var(--muted); }
+    .hobby-form {
+      display: grid; gap: 12px; margin: 0 0 14px; padding: 12px;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--card);
+    }
+    .hobby-form h3 {
+      margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--fg);
+    }
+    .field { display: grid; gap: 4px; }
+    .field > span.title { font-size: 13px; color: var(--fg); font-weight: 500; }
+    .field > small.note { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .hobby-form input, .hobby-form select {
+      padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+      background: var(--bg); color: var(--fg); width: 100%;
+    }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 640px) { .row2 { grid-template-columns: 1fr; } }
+    .item-block { display: grid; gap: 6px; }
+    .item-block > .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .item-block > .head .title { font-size: 13px; font-weight: 500; }
+    .item-block > .head small { font-size: 12px; color: var(--muted); }
+    .item-list { display: grid; gap: 6px; }
+    .item-row {
+      display: grid; gap: 6px; grid-template-columns: 1fr 1.2fr auto;
+      align-items: start; padding: 8px; border: 1px solid var(--line);
+      border-radius: 8px; background: var(--bg);
+    }
+    .item-row.fact {
+      grid-template-columns: minmax(72px, 0.55fr) 1fr 1.1fr auto;
+    }
+    .item-row input { min-width: 0; }
+    .item-row .del {
+      background: transparent; color: var(--danger); border: 1px solid var(--line);
+      padding: 6px 10px; border-radius: 6px; white-space: nowrap;
+    }
+    .item-row .del:hover { border-color: var(--danger); }
+    .add-btn {
+      background: transparent; color: var(--accent); border: 1px dashed var(--line);
+      padding: 6px 10px; border-radius: 6px; justify-self: start;
+    }
+    .add-btn:hover { border-color: var(--accent); }
+    .empty-hint { font-size: 12px; color: var(--muted); padding: 2px 0; }
+    @media (max-width: 720px) {
+      .item-row, .item-row.fact { grid-template-columns: 1fr; }
+      .item-row .del { justify-self: end; }
+    }
+    #hobbyPanel { display: none; }
+    #hobbyPanel.is-open { display: block; }
+    #editor.hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <button type="button" class="ghost" id="homeBtn">← 返回主页</button>
+    <h1>角色人设</h1>
+    <span class="muted" id="pageNote">爱好：每条可点选添加，并写「实际意思」备注；系统按本轮话题只注入命中类。</span>
+    <div class="tabs" id="charTabs"></div>
+    <span style="flex:1"></span>
+    <button type="button" class="ghost" id="reloadBtn">刷新</button>
+    <button type="button" id="saveBtn">保存当前</button>
+  </header>
+  <p id="err"></p>
+  <p id="ok"></p>
+  <main>
+    <aside>
+      <p class="aside-h">人设模块</p>
+      <div id="modList"></div>
+      <p class="aside-h">爱好设定（按话题注入）</p>
+      <div id="hobbyList"></div>
+    </aside>
+    <article>
+      <div class="meta">
+        <strong id="modTitle">请选择</strong>
+        <span class="muted" id="modWhen"></span>
+        <span class="muted" id="modMeta"></span>
+      </div>
+      <p id="modHint" style="display:none"></p>
+      <div id="hobbyPanel">
+        <div class="hobby-form">
+          <h3>检测设置</h3>
+          <div class="row2">
+            <label class="field">
+              <span class="title">显示名</span>
+              <small class="note">侧栏与话题锁里显示的名称</small>
+              <input id="hLabel" />
+            </label>
+            <label class="field">
+              <span class="title">姿态</span>
+              <small class="note">内置四档 + 可新建自定义；自定义需指定落到哪条内置行为</small>
+              <div style="display:flex;gap:8px;align-items:center">
+                <select id="hStance" style="flex:1">
+                  <option value="engage">engage 可多说</option>
+                  <option value="soft">soft 轻带</option>
+                  <option value="deflect">deflect 避开主爱好</option>
+                  <option value="ignore">ignore 不接</option>
+                </select>
+                <button type="button" class="ghost" id="hAddStyleBtn" title="新建自定义姿态">＋风格</button>
+              </div>
+            </label>
+          </div>
+          <div class="row2">
+            <label class="field">
+              <span class="title">优先级</span>
+              <small class="note">同分时数字更大者优先（1–10）</small>
+              <input id="hPriority" type="number" min="1" max="10" />
+            </label>
+            <label class="field">
+              <span class="title">未命中禁止填空</span>
+              <small class="note">开启后，闲聊/环境音不得用本类当默认话题</small>
+              <select id="hForbid">
+                <option value="false">否</option>
+                <option value="true">是</option>
+              </select>
+            </label>
+          </div>
+          <div class="item-block" data-list="keywords">
+            <div class="head">
+              <span class="title">关键词</span>
+              <small>点 + 添加；备注写「实际用来匹配什么」</small>
+            </div>
+            <div class="item-list" id="hKeywords"></div>
+            <button type="button" class="add-btn" data-add="keywords">+ 添加关键词</button>
+          </div>
+          <div class="item-block" data-list="aliases">
+            <div class="head">
+              <span class="title">别名</span>
+              <small>补充说法，权重同关键词</small>
+            </div>
+            <div class="item-list" id="hAliases"></div>
+            <button type="button" class="add-btn" data-add="aliases">+ 添加别名</button>
+          </div>
+          <div class="item-block" data-list="samples">
+            <div class="head">
+              <span class="title">口吻样本（检测侧）</span>
+              <small>参与 embedding 原型；备注可写使用场景</small>
+            </div>
+            <div class="item-list" id="hSamples"></div>
+            <button type="button" class="add-btn" data-add="samples">+ 添加样本</button>
+          </div>
+        </div>
+        <div class="hobby-form">
+          <h3>注入正文（命中才加载）</h3>
+          <div class="item-block" data-list="facts">
+            <div class="head">
+              <span class="title">事实设定</span>
+              <small>键=值；备注写给人看的真实含义</small>
+            </div>
+            <div class="item-list" id="hFacts"></div>
+            <button type="button" class="add-btn" data-add="facts">+ 添加事实</button>
+          </div>
+          <div class="item-block" data-list="allow">
+            <div class="head">
+              <span class="title">允许</span>
+              <small>命中后可以说/做的方向</small>
+            </div>
+            <div class="item-list" id="hAllow"></div>
+            <button type="button" class="add-btn" data-add="allow">+ 添加允许项</button>
+          </div>
+          <div class="item-block" data-list="forbid">
+            <div class="head">
+              <span class="title">禁止</span>
+              <small>硬禁项：百科、FAQ、硬切等</small>
+            </div>
+            <div class="item-list" id="hForbidPolicy"></div>
+            <button type="button" class="add-btn" data-add="forbid">+ 添加禁止项</button>
+          </div>
+          <div class="item-block" data-list="tone">
+            <div class="head">
+              <span class="title">语气</span>
+              <small>口吻标签；备注写期望听感</small>
+            </div>
+            <div class="item-list" id="hTone"></div>
+            <button type="button" class="add-btn" data-add="tone">+ 添加语气</button>
+          </div>
+          <div class="item-block" data-list="behaviors">
+            <div class="head">
+              <span class="title">行为规则</span>
+              <small>IF … THEN …；备注写为什么要这条</small>
+            </div>
+            <div class="item-list" id="hBehaviors"></div>
+            <button type="button" class="add-btn" data-add="behaviors">+ 添加规则</button>
+          </div>
+          <div class="item-block" data-list="ex_ok">
+            <div class="head">
+              <span class="title">正例</span>
+              <small>期望口吻；备注可写「好在哪」</small>
+            </div>
+            <div class="item-list" id="hExOk"></div>
+            <button type="button" class="add-btn" data-add="ex_ok">+ 添加正例</button>
+          </div>
+          <div class="item-block" data-list="ex_bad">
+            <div class="head">
+              <span class="title">反例</span>
+              <small>禁止复现的坏句；备注写「坏在哪」</small>
+            </div>
+            <div class="item-list" id="hExBad"></div>
+            <button type="button" class="add-btn" data-add="ex_bad">+ 添加反例</button>
+          </div>
+        </div>
+      </div>
+      <textarea id="editor" spellcheck="false" placeholder="只写这个角色。不要在文里声明工作流优先级或 [P0]。"></textarea>
+    </article>
+  </main>
+  <script>
+    function getToken() {
+      const q = new URLSearchParams(location.search).get("auth_token");
+      if (q) {
+        try { localStorage.setItem("token", q); } catch (e) {}
+        return q;
+      }
+      return localStorage.getItem("token") || "";
+    }
+    function apiBase() {
+      if (location.pathname.includes("/backend-api/api/persona")) {
+        return location.pathname.replace(/\/ui\/?$/, "");
+      }
+      const prefix = location.pathname.startsWith("/qqbot/") ? "/qqbot" : "";
+      return prefix + "/backend-api/api/persona";
+    }
+    function semanticBase() {
+      const prefix = location.pathname.startsWith("/qqbot/") ? "/qqbot" : "";
+      return prefix + "/backend-api/api/semantic-classify";
+    }
+    function homeUrl() {
+      if (location.pathname.startsWith("/qqbot/")) return "/qqbot/";
+      return "/";
+    }
+    const err = document.getElementById("err");
+    const ok = document.getElementById("ok");
+    const editor = document.getElementById("editor");
+    const HOBBY_META = ["hLabel", "hStance", "hPriority", "hForbid"];
+    const LIST_META = {
+      keywords: { el: "hKeywords", fact: false, phValue: "关键词", phNote: "实际匹配含义" },
+      aliases: { el: "hAliases", fact: false, phValue: "别名", phNote: "实际匹配含义" },
+      samples: { el: "hSamples", fact: false, phValue: "口吻样本", phNote: "场景/用途" },
+      facts: { el: "hFacts", fact: true, phKey: "键", phValue: "值", phNote: "实际意思" },
+      allow: { el: "hAllow", fact: false, phValue: "允许项", phNote: "实际意思" },
+      forbid: { el: "hForbidPolicy", fact: false, phValue: "禁止项", phNote: "实际意思" },
+      tone: { el: "hTone", fact: false, phValue: "语气标签", phNote: "期望听感" },
+      behaviors: { el: "hBehaviors", fact: false, phValue: "IF … THEN …", phNote: "为什么要这条" },
+      ex_ok: { el: "hExOk", fact: false, phValue: "正例句", phNote: "好在哪" },
+      ex_bad: { el: "hExBad", fact: false, phValue: "反例句", phNote: "坏在哪" },
+    };
+    let catalog = [];
+    let character = "soyo";
+    let kind = "module";
+    let itemId = "base";
+    let loadedSnapshot = "";
+    let dirty = false;
+    let listState = {
+      keywords: [], aliases: [], samples: [],
+      facts: [], allow: [], forbid: [], tone: [],
+      behaviors: [], ex_ok: [], ex_bad: [],
+    };
+
+    function splitList(s, sep) {
+      const raw = String(s || "");
+      const parts = sep instanceof RegExp ? raw.split(sep) : raw.split(sep);
+      return parts.map((x) => x.trim()).filter(Boolean);
+    }
+    function emptyItem() {
+      return { key: "", value: "", note: "" };
+    }
+    function parseAnnotated(raw) {
+      let s = String(raw || "").trim();
+      let note = "";
+      const sep = " :: ";
+      if (s.includes(sep)) {
+        const i = s.indexOf(sep);
+        note = s.slice(i + sep.length).trim();
+        s = s.slice(0, i).trim();
+        if (/^note=/i.test(note)) note = note.slice(5).trim();
+      }
+      let key = "";
+      let value = s;
+      if (s.includes("=") && !/^IF\s/i.test(s)) {
+        const left = s.slice(0, s.indexOf("=")).trim();
+        const right = s.slice(s.indexOf("=") + 1).trim();
+        if (left && !/\s/.test(left)) {
+          key = left;
+          value = right;
+        }
+      }
+      return { key, value, note };
+    }
+    function normalizeItems(arr, asFact) {
+      const out = [];
+      (Array.isArray(arr) ? arr : []).forEach((x) => {
+        if (x && typeof x === "object" && !Array.isArray(x)) {
+          let key = String(x.key || "").trim();
+          let value = String(x.value != null ? x.value : (x.text || "")).trim();
+          let note = String(x.note || "").trim();
+          if (!value && !key) return;
+          if (asFact && !key && value.includes("=")) {
+            const p = parseAnnotated(note ? value + " :: " + note : value);
+            out.push(p);
+          } else {
+            out.push({ key, value, note });
+          }
+          return;
+        }
+        const p = parseAnnotated(String(x == null ? "" : x));
+        if (p.value === "(none)" && !p.note) return;
+        if (p.value || p.key) out.push(p);
+      });
+      return out;
+    }
+    function itemValues(arr) {
+      return normalizeItems(arr).map((it) => {
+        if (it.key && it.value) return it.key + "=" + it.value;
+        return it.value || it.key || "";
+      }).filter(Boolean);
+    }
+    function asList(v) {
+      if (Array.isArray(v)) return normalizeItems(v);
+      if (v == null || v === "") return [];
+      return normalizeItems([v]);
+    }
+    function parseHobbyPackClient(text) {
+      const out = {
+        id: "", stance: "soft", scope: "ON_HIT_ONLY",
+        facts: [], allow: [], forbid: [], tone: [],
+        behaviors: [], ex_ok: [], ex_bad: [],
+      };
+      const raw = String(text || "");
+      const m = raw.match(/\[HOBBY_PACK\]([\s\S]*?)\[\/HOBBY_PACK\]/i);
+      const body = m ? m[1] : raw;
+      if (!body.trim()) return out;
+      let section = "";
+      let policyMode = "";
+      body.split(/\r?\n/).forEach((line) => {
+        const s = line.trim();
+        if (!s) return;
+        const low = s.toLowerCase();
+        if (low.startsWith("id:")) { out.id = s.slice(3).trim(); section = ""; policyMode = ""; return; }
+        if (low.startsWith("stance:")) { out.stance = s.slice(7).trim() || "soft"; section = ""; policyMode = ""; return; }
+        if (low.startsWith("scope:")) { out.scope = s.slice(6).trim() || "ON_HIT_ONLY"; section = ""; policyMode = ""; return; }
+        if (low === "facts:" || low === "facts") { section = "facts"; policyMode = ""; return; }
+        if (low === "policy:" || low === "policy") { section = "policy"; policyMode = ""; return; }
+        if (low === "behavior:" || low === "behaviors:" || low === "behavior") { section = "behaviors"; policyMode = ""; return; }
+        if (low === "ex_ok:" || low === "ex_ok") { section = "ex_ok"; policyMode = ""; return; }
+        if (low === "ex_bad:" || low === "ex_bad") { section = "ex_bad"; policyMode = ""; return; }
+        if (section === "policy") {
+          if (low === "allow:" || low === "allow" || low.startsWith("allow:")) {
+            policyMode = "allow";
+            const rest = s.includes(":") ? s.slice(s.indexOf(":") + 1).trim() : "";
+            if (rest) out.allow = out.allow.concat(normalizeItems(splitList(rest, /[|,，、]/)));
+            return;
+          }
+          if (low === "forbid:" || low === "forbid" || low.startsWith("forbid:")) {
+            policyMode = "forbid";
+            const rest = s.includes(":") ? s.slice(s.indexOf(":") + 1).trim() : "";
+            if (rest) out.forbid = out.forbid.concat(normalizeItems(splitList(rest, /[|,，、]/)));
+            return;
+          }
+          if (low === "tone:" || low === "tone" || low.startsWith("tone:")) {
+            policyMode = "tone";
+            const rest = s.includes(":") ? s.slice(s.indexOf(":") + 1).trim() : "";
+            if (rest) out.tone = out.tone.concat(normalizeItems(splitList(rest, /[|,，、]/)));
+            return;
+          }
+          const item = s.startsWith("- ") ? s.slice(2).trim() : s;
+          if (policyMode && item && item !== "-") out[policyMode] = out[policyMode].concat(normalizeItems([item]));
+          return;
+        }
+        const item = s.startsWith("- ") ? s.slice(2).trim() : s;
+        if (!item || item === "(none)" || item === "-") return;
+        if (section === "facts") out.facts = out.facts.concat(normalizeItems([item], true));
+        else if (section === "behaviors") out.behaviors = out.behaviors.concat(normalizeItems([item]));
+        else if (section === "ex_ok") out.ex_ok = out.ex_ok.concat(normalizeItems([item]));
+        else if (section === "ex_bad") out.ex_bad = out.ex_bad.concat(normalizeItems([item]));
+      });
+      return out;
+    }
+    function packHasContent(pack) {
+      if (!pack || typeof pack !== "object") return false;
+      return ["facts", "allow", "forbid", "tone", "behaviors", "ex_ok", "ex_bad"]
+        .some((k) => asList(pack[k]).length > 0);
+    }
+    function resolvePack(doc) {
+      let pack = doc && doc.pack;
+      if (packHasContent(pack)) {
+        return {
+          id: pack.id || itemId,
+          stance: pack.stance || doc.stance || "soft",
+          scope: pack.scope || "ON_HIT_ONLY",
+          facts: normalizeItems(pack.facts, true),
+          allow: normalizeItems(pack.allow),
+          forbid: normalizeItems(pack.forbid),
+          tone: normalizeItems(pack.tone),
+          behaviors: normalizeItems(pack.behaviors),
+          ex_ok: normalizeItems(pack.ex_ok),
+          ex_bad: normalizeItems(pack.ex_bad),
+        };
+      }
+      if (doc && doc.text) return parseHobbyPackClient(doc.text);
+      return parseHobbyPackClient("");
+    }
+    function renderList(name) {
+      const meta = LIST_META[name];
+      const wrap = document.getElementById(meta.el);
+      if (!wrap) return;
+      const items = listState[name] || [];
+      wrap.innerHTML = "";
+      if (!items.length) {
+        const hint = document.createElement("div");
+        hint.className = "empty-hint";
+        hint.textContent = "暂无条目，点下方 + 添加";
+        wrap.appendChild(hint);
+      }
+      items.forEach((it, idx) => {
+        const row = document.createElement("div");
+        row.className = "item-row" + (meta.fact ? " fact" : "");
+        if (meta.fact) {
+          const k = document.createElement("input");
+          k.placeholder = meta.phKey || "键";
+          k.value = it.key || "";
+          k.oninput = () => { listState[name][idx].key = k.value; markDirty(); };
+          row.appendChild(k);
+        }
+        const v = document.createElement("input");
+        v.placeholder = meta.phValue || "内容";
+        v.value = it.value || "";
+        v.oninput = () => { listState[name][idx].value = v.value; markDirty(); };
+        row.appendChild(v);
+        const n = document.createElement("input");
+        n.placeholder = meta.phNote || "实际意思 / 备注";
+        n.value = it.note || "";
+        n.oninput = () => { listState[name][idx].note = n.value; markDirty(); };
+        row.appendChild(n);
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "del";
+        del.textContent = "删除";
+        del.onclick = () => {
+          listState[name].splice(idx, 1);
+          renderList(name);
+          markDirty();
+        };
+        row.appendChild(del);
+        wrap.appendChild(row);
+      });
+    }
+    function setList(name, items, asFact) {
+      listState[name] = normalizeItems(items, !!asFact);
+      renderList(name);
+    }
+    function addListItem(name) {
+      if (!listState[name]) listState[name] = [];
+      listState[name].push(emptyItem());
+      renderList(name);
+      markDirty();
+      const meta = LIST_META[name];
+      const wrap = document.getElementById(meta.el);
+      const last = wrap && wrap.querySelector(".item-row:last-child input");
+      if (last) last.focus();
+    }
+    function readItems(name, asFact) {
+      return normalizeItems(listState[name] || [], !!asFact).filter((it) => it.value || it.key);
+    }
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+      const token = getToken();
+      let url = apiBase() + path;
+      if (token) {
+        headers.Authorization = "Bearer " + token;
+        url += (url.includes("?") ? "&" : "?") + "auth_token=" + encodeURIComponent(token);
+      }
+      const res = await fetch(url, Object.assign({}, opts, { headers }));
+      if (res.status === 401) throw new Error("请先打开 Kirara WebUI 登录，再回到本页刷新。");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+    async function apiSemantic(path, opts = {}) {
+      const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+      const token = getToken();
+      let url = semanticBase() + "/" + character + path;
+      if (token) {
+        headers.Authorization = "Bearer " + token;
+        url += (url.includes("?") ? "&" : "?") + "auth_token=" + encodeURIComponent(token);
+      }
+      const res = await fetch(url, Object.assign({}, opts, { headers }));
+      if (res.status === 401) throw new Error("请先打开 Kirara WebUI 登录，再回到本页刷新。");
+      if (res.status === 204) return null;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+    async function refreshStanceOptions(selected) {
+      const sel = document.getElementById("hStance");
+      const cur = selected || sel.value || "soft";
+      let styles = [];
+      try {
+        styles = (await apiSemantic("/reply-styles")) || [];
+      } catch (e) {
+        styles = [
+          { id: "engage", label: "engage 可多说", builtin: true },
+          { id: "soft", label: "soft 轻带", builtin: true },
+          { id: "deflect", label: "deflect 避开主爱好", builtin: true },
+          { id: "ignore", label: "ignore 不接", builtin: true },
+        ];
+      }
+      const labels = {
+        engage: "engage 可多说",
+        soft: "soft 轻带",
+        deflect: "deflect 避开主爱好",
+        ignore: "ignore 不接",
+      };
+      sel.innerHTML = styles.map((s) => {
+        const lab = s.builtin ? (labels[s.id] || s.label) : (s.label + " (自定义)");
+        return `<option value="${s.id}">${lab}</option>`;
+      }).join("");
+      if (cur && ![...sel.options].some((o) => o.value === cur)) {
+        const o = document.createElement("option");
+        o.value = cur;
+        o.textContent = cur;
+        sel.appendChild(o);
+      }
+      sel.value = cur;
+    }
+    async function createCustomStance() {
+      const id = prompt("风格 ID（小写字母开头，仅 a-z0-9_-）", "warm_tease");
+      if (!id) return;
+      const label = prompt("显示名", "温柔调侃");
+      if (!label) return;
+      const base = prompt("落到哪条内置行为？engage / soft / deflect / ignore", "soft");
+      if (!base) return;
+      try {
+        const created = await apiSemantic("/reply-styles", {
+          method: "POST",
+          body: JSON.stringify({ id: id.trim(), label: label.trim(), base: base.trim() }),
+        });
+        await refreshStanceOptions(created.id);
+        markDirty();
+        showOk("已新增姿态「" + created.label + "」");
+      } catch (e) {
+        showError(e);
+      }
+    }
+    function showError(e) { err.textContent = e && e.message ? e.message : String(e || ""); ok.textContent = ""; }
+    function showOk(msg) { ok.textContent = msg || ""; err.textContent = ""; }
+    function currentChar() {
+      return catalog.find((c) => c.id === character) || catalog[0];
+    }
+    function confirmLeave() {
+      if (!dirty) return true;
+      return window.confirm("当前有未保存修改，确定离开？");
+    }
+    function readPackFromForm() {
+      return {
+        id: itemId,
+        stance: document.getElementById("hStance").value,
+        scope: itemId === "idle_ambient" ? "ON_MISS_DEFAULT" : "ON_HIT_ONLY",
+        facts: readItems("facts", true),
+        allow: readItems("allow"),
+        forbid: readItems("forbid"),
+        tone: readItems("tone"),
+        behaviors: readItems("behaviors"),
+        ex_ok: readItems("ex_ok"),
+        ex_bad: readItems("ex_bad"),
+      };
+    }
+    function hobbySnapshot() {
+      return JSON.stringify({
+        label: document.getElementById("hLabel").value,
+        stance: document.getElementById("hStance").value,
+        priority: document.getElementById("hPriority").value,
+        forbid_pivot: document.getElementById("hForbid").value,
+        keywords: readItems("keywords"),
+        aliases: readItems("aliases"),
+        samples: readItems("samples"),
+        pack: readPackFromForm(),
+      });
+    }
+    function markDirty() {
+      if (kind === "hobby") dirty = hobbySnapshot() !== loadedSnapshot;
+      else dirty = editor.value !== loadedSnapshot;
+    }
+    async function fillHobbyForm(doc) {
+      document.getElementById("hLabel").value = doc.label || itemId;
+      await refreshStanceOptions(doc.stance || "soft");
+      document.getElementById("hPriority").value = doc.priority != null ? doc.priority : 3;
+      document.getElementById("hForbid").value = doc.forbid_pivot ? "true" : "false";
+      setList("keywords", doc.keywords);
+      setList("aliases", doc.aliases);
+      setList("samples", doc.sample_lines);
+      const pack = resolvePack(doc);
+      setList("facts", pack.facts, true);
+      setList("allow", pack.allow);
+      setList("forbid", pack.forbid);
+      setList("tone", pack.tone);
+      setList("behaviors", pack.behaviors);
+      setList("ex_ok", pack.ex_ok);
+      setList("ex_bad", pack.ex_bad);
+      return pack;
+    }
+    function renderChars() {
+      const wrap = document.getElementById("charTabs");
+      wrap.innerHTML = "";
+      catalog.forEach((c) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tab" + (c.id === character ? " active" : "");
+        b.textContent = c.display || c.id;
+        b.onclick = async () => {
+          if (c.id === character) return;
+          if (!confirmLeave()) return;
+          character = c.id;
+          kind = "module";
+          itemId = (c.modules[0] && c.modules[0].id) || "base";
+          renderChars();
+          renderLists();
+          await openItem(kind, itemId, true);
+        };
+        wrap.appendChild(b);
+      });
+    }
+    function renderLists() {
+      const ch = currentChar();
+      const modWrap = document.getElementById("modList");
+      const hobbyWrap = document.getElementById("hobbyList");
+      modWrap.innerHTML = "";
+      hobbyWrap.innerHTML = "";
+      (ch && ch.modules || []).forEach((m) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "mod" + (kind === "module" && m.id === itemId ? " active" : "");
+        b.innerHTML = "<strong>" + m.label + "</strong><small>" + m.when + "</small>";
+        b.onclick = () => openItem("module", m.id);
+        modWrap.appendChild(b);
+      });
+      (ch && ch.hobbies || []).forEach((h) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "mod" + (kind === "hobby" && h.id === itemId ? " active" : "");
+        b.innerHTML = "<strong>" + (h.label || h.id) + "</strong><small>" + (h.stance || "") + " · 命中才注入</small>";
+        b.onclick = () => openItem("hobby", h.id);
+        hobbyWrap.appendChild(b);
+      });
+    }
+    async function openItem(nextKind, id, force) {
+      try {
+      if (!force && nextKind === kind && id === itemId && loadedSnapshot !== "") return;
+      if (!force && !confirmLeave()) return;
+      kind = nextKind;
+      itemId = id;
+      renderLists();
+      if (kind === "module") {
+        const hp = document.getElementById("hobbyPanel");
+        hp.style.display = "none";
+        hp.classList.remove("is-open");
+        editor.classList.remove("hidden");
+        const doc = await api("/" + character + "/modules/" + id);
+        editor.value = doc.text || "";
+        loadedSnapshot = editor.value;
+        dirty = false;
+        document.getElementById("modTitle").textContent = doc.label || id;
+        document.getElementById("modWhen").textContent = doc.when || "";
+        document.getElementById("modHint").textContent = doc.hint || "";
+        document.getElementById("modHint").style.display = doc.hint ? "" : "none";
+        document.getElementById("modMeta").textContent =
+          (doc.bytes ? doc.bytes + " 字节" : "空文件")
+          + (doc.updated_at ? " · " + doc.updated_at : "");
+      } else {
+        const hp = document.getElementById("hobbyPanel");
+        hp.style.display = "block";
+        hp.classList.add("is-open");
+        editor.classList.add("hidden");
+        const doc = await api("/" + character + "/hobbies/" + id);
+        const pack = await fillHobbyForm(doc);
+        const filled =
+          readItems("keywords").length
+          + readItems("facts", true).length
+          + readItems("allow").length
+          + readItems("ex_ok").length;
+        if (!filled && !(doc.text || "").trim()) {
+          showError(new Error("爱好数据为空：服务器未返回 keywords/pack/text，请刷新或检查 hobby_modules。"));
+        }
+        loadedSnapshot = hobbySnapshot();
+        dirty = false;
+        document.getElementById("modTitle").textContent = "爱好 · " + (doc.label || id);
+        document.getElementById("modWhen").textContent = doc.when || "";
+        document.getElementById("modHint").textContent = doc.hint || "";
+        document.getElementById("modHint").style.display = doc.hint ? "" : "none";
+        document.getElementById("modMeta").textContent =
+          (doc.bytes ? doc.bytes + " 字节" : "空模块")
+          + (doc.updated_at ? " · " + doc.updated_at : "")
+          + (readItems("facts", true).length ? " · 已载入正文" : "");
+      }
+      showOk("");
+      } catch (e) { showError(e); }
+    }
+    async function loadCatalog() {
+      const data = await api("/catalog");
+      catalog = data.characters || [];
+      if (data.note) document.getElementById("pageNote").textContent = data.note;
+      if (!catalog.some((c) => c.id === character) && catalog[0]) character = catalog[0].id;
+      renderChars();
+      renderLists();
+    }
+    document.getElementById("homeBtn").onclick = () => {
+      if (!confirmLeave()) return;
+      location.assign(homeUrl());
+    };
+    document.getElementById("reloadBtn").onclick = async () => {
+      try {
+        if (!confirmLeave()) return;
+        await loadCatalog();
+        await openItem(kind, itemId, true);
+        showOk("已刷新");
+      } catch (e) { showError(e); }
+    };
+    document.getElementById("saveBtn").onclick = async () => {
+      try {
+        if (kind === "module") {
+          const saved = await api("/" + character + "/modules/" + itemId, {
+            method: "PUT",
+            body: JSON.stringify({ text: editor.value }),
+          });
+          editor.value = saved.text != null ? saved.text : editor.value;
+          loadedSnapshot = editor.value;
+        } else {
+          const saved = await api("/" + character + "/hobbies/" + itemId, {
+            method: "PUT",
+            body: JSON.stringify({
+              label: document.getElementById("hLabel").value,
+              stance: document.getElementById("hStance").value,
+              priority: Number(document.getElementById("hPriority").value || 3),
+              forbid_pivot: document.getElementById("hForbid").value === "true",
+              keywords: readItems("keywords"),
+              aliases: readItems("aliases"),
+              sample_lines: readItems("samples"),
+              pack: readPackFromForm(),
+            }),
+          });
+          await fillHobbyForm(saved);
+          loadedSnapshot = hobbySnapshot();
+        }
+        dirty = false;
+        await loadCatalog();
+        renderLists();
+        showOk("已保存。每条带备注会写成「内容 :: 实际意思」，命中话题时才注入。");
+      } catch (e) { showError(e); }
+    };
+    const addStyleBtn = document.getElementById("hAddStyleBtn");
+    if (addStyleBtn) addStyleBtn.onclick = () => createCustomStance();
+    editor.addEventListener("input", markDirty);
+    HOBBY_META.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("input", markDirty);
+      el.addEventListener("change", markDirty);
+    });
+    document.querySelectorAll("[data-add]").forEach((btn) => {
+      btn.addEventListener("click", () => addListItem(btn.getAttribute("data-add")));
+    });
+    window.addEventListener("beforeunload", (e) => {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    });
+    (async () => {
+      try {
+        await loadCatalog();
+        await openItem(kind, itemId, true);
+      } catch (e) { showError(e); }
+    })();
+  </script>
+</body>
+</html>

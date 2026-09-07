@@ -1,0 +1,7 @@
+{
+  "host": "0.0.0.0",
+  "prefix": "/qqbot/napcat-soyo",
+  "port": 6099,
+  "token": "YOUR_NAPCAT_WEBUI_TOKEN",
+  "loginRate": 3
+}

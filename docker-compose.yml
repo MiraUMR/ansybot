@@ -1,0 +1,69 @@
+services:
+  kirara-agent:
+    image: lss233/kirara-agent-framework:latest
+    container_name: kirara-qq-bot
+    restart: always
+    volumes:
+      - ./data:/app/data
+      - ./patches/gateway.py:/usr/local/lib/python3.11/site-packages/ymbotpy/gateway.py:ro
+      - ./patches/openai_adapter.py:/usr/local/lib/python3.11/site-packages/kirara_ai/plugins/llm_preset_adapters/openai_adapter.py:ro
+      - ./patches/im_messages.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/implementations/blocks/im/messages.py:ro
+      - ./patches/llm_chat.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/implementations/blocks/llm/chat.py:ro
+      - ./patches/workflow_routes.py:/usr/local/lib/python3.11/site-packages/kirara_ai/web/api/workflow/routes.py:ro
+      - ./patches/dispatch_message_rules.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/core/dispatch/rules/message_rules.py:ro
+      - ./patches/dispatch_registry.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/core/dispatch/registry.py:ro
+      - ./patches/dispatcher.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/core/dispatch/dispatcher.py:ro
+      - ./patches/media_carrier_service.py:/usr/local/lib/python3.11/site-packages/kirara_ai/media/carrier/service.py:ro
+      - ./patches/builtin_composes.py:/usr/local/lib/python3.11/site-packages/kirara_ai/memory/composes/builtin_composes.py:ro
+      - ./patches/llm_manager.py:/usr/local/lib/python3.11/site-packages/kirara_ai/llm/llm_manager.py:ro
+      - ./patches/llm_model_ref.py:/usr/local/lib/python3.11/site-packages/kirara_ai/llm/model_ref.py:ro
+      - ./patches/global_config.py:/usr/local/lib/python3.11/site-packages/kirara_ai/config/global_config.py:ro
+      - ./patches/llm_routes.py:/usr/local/lib/python3.11/site-packages/kirara_ai/web/api/llm/routes.py:ro
+      - ./patches/llm_models.py:/usr/local/lib/python3.11/site-packages/kirara_ai/web/api/llm/models.py:ro
+      - ./plugins/group_world_state:/usr/local/lib/python3.11/site-packages/kirara_ai/plugins/group_world_state:ro
+      - ./plugins/semantic_classify:/usr/local/lib/python3.11/site-packages/kirara_ai/plugins/semantic_classify:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    # Install OneBot + jieba on start so deps survive image updates.
+    command:
+      - sh
+      - -c
+      - python -c "import im_onebot_adapters" 2>/dev/null || pip install -q chatgpt-mirai-qq-bot-onebot-adapter; python -c "import jieba" 2>/dev/null || pip install -q jieba; exec python -m kirara_ai -H 0.0.0.0 -p 8080
+
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: napcat-qq
+    restart: always
+    shm_size: 2gb
+    mac_address: "02:42:ac:11:00:02"
+    environment:
+      NAPCAT_UID: "0"
+      NAPCAT_GID: "0"
+      WEBUI_TOKEN: ${WEBUI_TOKEN:-change-me}
+      WEBUI_PREFIX: /qqbot/napcat
+    ports:
+      - "6099:6099"
+    depends_on:
+      - kirara-agent
+    volumes:
+      - ./napcat/config:/app/napcat/config
+      - ./napcat/QQ:/app/.config/QQ
+
+  napcat-soyo:
+    image: mlikiowa/napcat-docker:latest
+    container_name: napcat-soyo
+    restart: always
+    shm_size: 2gb
+    mac_address: "02:42:ac:11:00:03"
+    environment:
+      NAPCAT_UID: "0"
+      NAPCAT_GID: "0"
+      WEBUI_TOKEN: ${WEBUI_TOKEN_SOYO:-change-me-soyo}
+      WEBUI_PREFIX: /qqbot/napcat-soyo
+    ports:
+      - "6100:6099"
+    depends_on:
+      - kirara-agent
+    volumes:
+      - ./napcat-soyo/config:/app/napcat/config
+      - ./napcat-soyo/QQ:/app/.config/QQ

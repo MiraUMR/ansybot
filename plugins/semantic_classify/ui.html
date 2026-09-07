@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-store" />
+<title>RP Bot 角色与语义分类</title>
+<style>
+:root{--bg:#1a1a2e;--card:#16213e;--border:#0f3460;--accent:#e94560;--text:#eee;--muted:#8892b0;--green:#4ec9b0;--yellow:#dcdcaa;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+header{padding:12px 24px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:18px;font-weight:700}
+.persona-switch,.mode-switch{display:flex;gap:4px;background:var(--bg);border-radius:8px;padding:3px}
+.persona-btn,.mode-btn{padding:6px 16px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;background:transparent;color:var(--muted);transition:.2s}
+.persona-btn.active,.mode-btn.active{background:var(--accent);color:#fff}
+.header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{padding:6px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;background:var(--card);color:var(--text);transition:.2s;text-decoration:none;display:inline-flex;align-items:center}
+.btn:hover{border-color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{opacity:.9}
+.btn-danger{border-color:#c0392b;color:#e74c3c}
+.btn-danger:hover{background:#c0392b;color:#fff}
+
+main{flex:1;display:grid;grid-template-columns:280px 1fr 340px;gap:1px;background:var(--border);overflow:hidden;min-height:0}
+.panel{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.panel-head{padding:10px 16px;background:var(--card);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+.cat-list{flex:1;overflow-y:auto;padding:8px}
+.cat-item{padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:4px;border:1px solid transparent;transition:.15s}
+.cat-item:hover{background:var(--card)}
+.cat-item.active{background:var(--card);border-color:var(--accent)}
+.cat-item-name{font-size:14px;font-weight:600;margin-bottom:2px}
+.cat-item-meta{font-size:11px;color:var(--muted);line-height:1.4}
+.priority-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.p-low{background:#8892b0}.p-medium{background:#dcdcaa}.p-high{background:#e94560}.p-critical{background:#ff2e63}
+
+.editor{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;min-height:0}
+.form-row{margin-bottom:14px}
+.form-row label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+input,select,textarea{width:100%;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px}
+#moduleEditor{flex:1;min-height:320px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.55;resize:none}
+.toggle-row{display:flex;align-items:center;gap:10px}
+.toggle{position:relative;width:40px;height:22px;cursor:pointer}
+.toggle input{display:none}
+.toggle .slider{position:absolute;inset:0;background:var(--border);border-radius:11px;transition:.2s}
+.toggle .slider::before{content:'';position:absolute;left:3px;top:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.slider{background:var(--accent)}
+.toggle input:checked+.slider::before{transform:translateX(18px)}
+.form-actions{display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);align-items:center}
+
+/* Tag dropdown trigger */
+.tag-dd{position:relative}
+.tag-trigger{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;
+  cursor:pointer;font-size:13px;color:var(--text);text-align:left;
+}
+.tag-trigger:hover,.tag-trigger.open{border-color:var(--accent)}
+.tag-trigger .meta{color:var(--muted);font-size:12px;white-space:nowrap}
+.tag-preview{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%}
+
+/* Tag popover */
+.tag-pop-mask{position:fixed;inset:0;z-index:80;background:transparent}
+.tag-pop{
+  position:fixed;z-index:90;width:min(420px,calc(100vw - 24px));max-height:min(420px,70vh);
+  background:var(--card);border:1px solid var(--accent);border-radius:10px;
+  box-shadow:0 12px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden;
+  animation:popIn .12s ease-out;
+}
+@keyframes popIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.tag-pop-head{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag-pop-head strong{font-size:13px}
+.tag-pop-body{flex:1;overflow-y:auto;padding:8px;display:grid;gap:6px}
+.tag-row{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center}
+.tag-row input{padding:7px 9px;font-size:12.5px}
+.tag-pop-foot{padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.tag-pop-foot .hint{font-size:11px;color:var(--muted);margin-right:auto}
+
+.test-panel{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.test-input-wrap{display:flex;gap:8px}
+.test-input-wrap input{flex:1}
+.result-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;animation:slideUp .2s}
+@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.result-card.hit{border-color:var(--green)}
+.result-card.miss{border-color:var(--muted)}
+.result-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.result-title{font-weight:700;font-size:14px}
+.result-badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
+.badge-hit{background:rgba(78,201,176,.15);color:var(--green)}
+.badge-miss{background:rgba(136,146,176,.15);color:var(--muted)}
+.result-meta{font-size:11px;color:var(--muted);margin-bottom:8px}
+.confidence-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.confidence-fill{height:100%;border-radius:2px;transition:width .3s}
+.prompt-box{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;overflow-y:auto;color:var(--yellow);min-height:120px}
+.prompt-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+.hint-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;line-height:1.55;color:var(--muted);white-space:pre-wrap}
+
+.slider-wrap{display:flex;align-items:center;gap:10px}
+.slider-wrap input[type=range]{flex:1;accent-color:var(--accent)}
+.slider-val{font-size:13px;font-weight:600;min-width:32px;text-align:right}
+
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;animation:toastIn .3s;pointer-events:none}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.toast-ok{background:var(--green);color:#1a1a2e}
+.toast-err{background:var(--accent);color:#fff}
+
+.empty-state{display:flex;align-items:center;justify-content:center;flex:1;color:var(--muted);font-size:13px;text-align:center;padding:40px}
+#authHint{display:none;padding:8px 24px;background:#3a1d28;color:#ffb4c0;font-size:13px;border-bottom:1px solid var(--border)}
+.mode-classify .only-modules{display:none!important}
+.mode-modules .only-classify{display:none!important}
+
+@media(max-width:900px){main{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}}
+</style>
+</head>
+<body class="mode-classify">
+
+<div id="authHint">请先打开 Kirara WebUI 登录，再回到本页刷新。</div>
+
+<header>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <a class="btn" href="#" id="homeBtn">← 返回</a>
+    <h1>角色管理</h1>
+    <div class="mode-switch">
+      <button type="button" class="mode-btn active" data-mode="classify">语义分类</button>
+      <button type="button" class="mode-btn" data-mode="modules">人设正文</button>
+    </div>
+  </div>
+  <div class="persona-switch">
+    <button type="button" class="persona-btn active" data-persona="soyo">Soyo</button>
+    <button type="button" class="persona-btn" data-persona="anon">Anon</button>
+  </div>
+  <div class="header-actions">
+    <div class="slider-wrap only-classify" title="匹配灵敏度">
+      <span style="font-size:11px;color:var(--muted)">灵敏度</span>
+      <input type="range" id="sensitivity-slider" min="0" max="100" value="45">
+      <span class="slider-val" id="sensitivity-val">45</span>
+    </div>
+    <button type="button" class="btn only-classify" id="exportBtn">导出配置</button>
+    <button type="button" class="btn btn-primary only-modules" id="saveModuleBtn">保存人设块</button>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="panel-head">
+      <span id="listTitle">场景列表</span>
+      <button type="button" class="btn btn-primary only-classify" style="padding:3px 10px;font-size:11px" id="addBtn">+ 新增</button>
+    </div>
+    <div class="cat-list" id="side-list"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head" id="editorTitle">编辑场景</div>
+    <div class="editor" id="editor">
+      <div class="empty-state">← 选择一项开始编辑</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head" id="rightTitle">测试 & Prompt 预览</div>
+    <div class="test-panel only-classify" id="rightClassify">
+      <div class="test-input-wrap">
+        <input type="text" id="test-text" placeholder="输入一句话测试…">
+        <button type="button" class="btn btn-primary" id="testBtn">测试</button>
+      </div>
+      <div id="test-result"></div>
+      <div class="prompt-label">生成的 Prompt 注入片段</div>
+      <div class="prompt-box" id="prompt-preview">点击「测试」后此处显示生成的 Prompt</div>
+    </div>
+    <div class="test-panel only-modules" id="rightModules" style="display:none">
+      <div class="prompt-label">模块说明</div>
+      <div class="hint-box" id="moduleHint">选择左侧人设模块查看说明。</div>
+      <div class="prompt-label">注入时机</div>
+      <div class="hint-box" id="moduleWhen">—</div>
+    </div>
+  </div>
+</main>
+
+<div id="tagPopHost"></div>
+
+<script>
+function getToken() {
+  const q = new URLSearchParams(location.search).get("auth_token");
+  if (q) {
+    try { localStorage.setItem("token", q); } catch (e) {}
+    return q;
+  }
+  return localStorage.getItem("token") || "";
+}
+function semanticRoot() {
+  if (location.pathname.includes("/backend-api/api/semantic-classify")) {
+    return location.pathname.replace(/\/ui\/?$/, "");
+  }
+  const prefix = location.pathname.startsWith("/qqbot/") ? "/qqbot" : "";
+  return prefix + "/backend-api/api/semantic-classify";
+}
+function personaRoot() {
+  const prefix = location.pathname.startsWith("/qqbot/") ? "/qqbot" : "";
+  return prefix + "/backend-api/api/persona";
+}
+function homeUrl() {
+  return location.pathname.startsWith("/qqbot/") ? "/qqbot/" : "/";
+}
+
+let uiMode = "classify"; // classify | modules
+let currentPersona = "soyo";
+let categories = [];
+let replyStyles = [];
+let modules = [];
+let activeCatId = null;
+let activeModuleId = null;
+let modulePack = null;
+let moduleSections = [];
+let moduleDirty = false;
+let moduleLoadedSnapshot = "";
+let sensitivity = 45;
+let saveTimer = null;
+let sensTimer = null;
+let moduleSaveTimer = null;
+
+/** @type {Record<string, string[]>} 分类 tag 缓存 */
+const tagDraftCache = {};
+/** @type {Record<string, object[]>} 人设条目缓存 */
+const modDraftCache = {};
+
+function cacheKey(field) {
+  return currentPersona + ":" + activeCatId + ":" + field;
+}
+function getTagDraft(field, fallback) {
+  const key = cacheKey(field);
+  if (Object.prototype.hasOwnProperty.call(tagDraftCache, key)) {
+    return tagDraftCache[key].slice();
+  }
+  return (fallback || []).slice();
+}
+function setTagDraft(field, arr) {
+  tagDraftCache[cacheKey(field)] = (arr || []).map((x) => String(x));
+}
+function clearTagDraft(field) {
+  delete tagDraftCache[cacheKey(field)];
+}
+function modCacheKey(section) {
+  return currentPersona + ":" + activeModuleId + ":" + section;
+}
+function getModDraft(section, fallback) {
+  const key = modCacheKey(section);
+  if (Object.prototype.hasOwnProperty.call(modDraftCache, key)) {
+    return JSON.parse(JSON.stringify(modDraftCache[key]));
+  }
+  return JSON.parse(JSON.stringify(fallback || []));
+}
+function setModDraft(section, arr) {
+  modDraftCache[modCacheKey(section)] = JSON.parse(JSON.stringify(arr || []));
+}
+function clearModDrafts() {
+  const prefix = currentPersona + ":" + activeModuleId + ":";
+  Object.keys(modDraftCache).forEach((k) => {
+    if (k.startsWith(prefix)) delete modDraftCache[k];
+  });
+}
+function normalizeItemList(arr) {
+  return (arr || []).map((x) => {
+    if (x && typeof x === "object") {
+      return {
+        key: String(x.key || ""),
+        value: String(x.value != null ? x.value : (x.text || "")),
+        note: String(x.note || ""),
+      };
+    }
+    return { key: "", value: String(x || ""), note: "" };
+  }).filter((it) => it.value || it.key || it.note);
+}
+function itemSummary(items) {
+  const a = normalizeItemList(items);
+  if (!a.length) return "未添加";
+  const head = a.slice(0, 2).map((it) => (it.key ? it.key + "=" : "") + (it.value || "")).join("、");
+  return a.length > 2 ? head + "…" : head;
+}
+
+async function apiFetch(root, method, path, body) {
+  const headers = { "Content-Type": "application/json" };
+  const token = getToken();
+  let url = root + path;
+  if (token) {
+    headers.Authorization = "Bearer " + token;
+    url += (url.includes("?") ? "&" : "?") + "auth_token=" + encodeURIComponent(token);
+  }
+  const opts = { method, headers };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (res.status === 401) {
+    document.getElementById("authHint").style.display = "block";
+    throw new Error("请先打开 Kirara WebUI 登录，再回到本页刷新。");
+  }
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+  document.getElementById("authHint").style.display = "none";
+  return data;
+}
+async function apiSemantic(method, path, body) {
+  return apiFetch(semanticRoot(), method, "/" + currentPersona + path, body);
+}
+async function apiPersona(method, path, body) {
+  return apiFetch(personaRoot(), method, path, body);
+}
+
+function toast(msg, ok) {
+  const el = document.createElement("div");
+  el.className = "toast " + (ok === false ? "toast-err" : "toast-ok");
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+function stanceLabel(s) {
+  const hit = replyStyles.find((x) => x.id === s);
+  if (hit) return hit.label + (hit.builtin ? "" : " (自定义)");
+  return { engage: "积极回应", soft: "温柔敷衍", deflect: "转移话题", ignore: "无视" }[s] || s;
+}
+function prioLabel(p) {
+  return { low: "低", medium: "中", high: "高", critical: "最高" }[p] || p;
+}
+
+async function loadReplyStyles() {
+  try {
+    replyStyles = (await apiSemantic("GET", "/reply-styles")) || [];
+  } catch (e) {
+    replyStyles = [
+      { id: "engage", label: "积极回应", builtin: true, base: "engage" },
+      { id: "soft", label: "温柔敷衍", builtin: true, base: "soft" },
+      { id: "deflect", label: "转移话题", builtin: true, base: "deflect" },
+      { id: "ignore", label: "无视", builtin: true, base: "ignore" },
+    ];
+  }
+}
+
+function setMode(mode) {
+  if (uiMode === "modules" && mode !== "modules" && moduleDirty) {
+    if (!confirm("人设正文有未保存修改，确定切换？")) return;
+  }
+  uiMode = mode;
+  document.body.classList.toggle("mode-classify", mode === "classify");
+  document.body.classList.toggle("mode-modules", mode === "modules");
+  document.querySelectorAll(".mode-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  document.getElementById("listTitle").textContent = mode === "classify" ? "场景列表" : "人设模块";
+  document.getElementById("editorTitle").textContent = mode === "classify" ? "编辑场景" : "编辑人设正文";
+  document.getElementById("rightTitle").textContent = mode === "classify" ? "测试 & Prompt 预览" : "模块说明";
+  document.getElementById("rightClassify").style.display = mode === "classify" ? "" : "none";
+  document.getElementById("rightModules").style.display = mode === "modules" ? "flex" : "none";
+  closeTagPop();
+  if (mode === "classify") {
+    renderSideList();
+    renderEditor();
+  } else {
+    loadModulesAndOpen();
+  }
+}
+
+async function switchPersona(persona) {
+  if (uiMode === "modules" && moduleDirty) {
+    if (!confirm("人设正文有未保存修改，确定切换角色？")) return;
+  }
+  currentPersona = persona;
+  document.querySelectorAll(".persona-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.persona === persona);
+  });
+  activeCatId = null;
+  activeModuleId = null;
+  moduleDirty = false;
+  closeTagPop();
+  await loadConfig();
+  await loadReplyStyles();
+  if (uiMode === "classify") {
+    await loadCategories();
+    clearTest();
+  } else {
+    await loadModulesAndOpen();
+  }
+}
+
+/* ===== Classify ===== */
+async function loadCategories() {
+  try {
+    categories = (await apiSemantic("GET", "/categories")) || [];
+    renderSideList();
+    if (activeCatId && categories.find((c) => c.id === activeCatId)) renderEditor();
+    else if (categories.length && !activeCatId) {
+      activeCatId = categories[0].id;
+      renderSideList();
+      renderEditor();
+    } else renderEditor();
+  } catch (e) {
+    toast("加载分类失败: " + e.message, false);
+  }
+}
+async function loadConfig() {
+  try {
+    const cfg = await apiSemantic("GET", "/config");
+    sensitivity = cfg.sensitivity != null ? cfg.sensitivity : 45;
+    document.getElementById("sensitivity-slider").value = sensitivity;
+    document.getElementById("sensitivity-val").textContent = sensitivity;
+  } catch (e) { /* ignore */ }
+}
+
+function renderSideList() {
+  const list = document.getElementById("side-list");
+  if (uiMode === "modules") {
+    if (!modules.length) {
+      list.innerHTML = '<div class="empty-state">暂无模块</div>';
+      return;
+    }
+    list.innerHTML = modules.map((m) => `
+      <div class="cat-item ${m.id === activeModuleId ? "active" : ""}" data-id="${esc(m.id)}">
+        <div class="cat-item-name">${esc(m.label || m.id)}</div>
+        <div class="cat-item-meta">${esc(m.when || "")}</div>
+      </div>
+    `).join("");
+    list.querySelectorAll(".cat-item").forEach((el) => {
+      el.onclick = () => openModule(el.getAttribute("data-id"));
+    });
+    return;
+  }
+  if (!categories.length) {
+    list.innerHTML = '<div class="empty-state">暂无场景<br>点击上方 + 新增</div>';
+    return;
+  }
+  list.innerHTML = categories.map((c) => `
+    <div class="cat-item ${c.id === activeCatId ? "active" : ""}" data-id="${esc(c.id)}">
+      <div class="cat-item-name"><span class="priority-dot p-${esc(c.priority)}"></span>${esc(c.display_name)}</div>
+      <div class="cat-item-meta">${(c.trigger_words || []).length} 触发词 · ${esc(c.reply_stance)}</div>
+    </div>
+  `).join("");
+  list.querySelectorAll(".cat-item").forEach((el) => {
+    el.onclick = () => {
+      activeCatId = el.getAttribute("data-id");
+      renderSideList();
+      renderEditor();
+    };
+  });
+}
+
+function tagSummary(arr) {
+  const a = arr || [];
+  if (!a.length) return "未添加";
+  const head = a.slice(0, 2).join("、");
+  return a.length > 2 ? head + "…" : head;
+}
+
+function renderTagDropdown(field, label, values) {
+  const draft = getTagDraft(field, values);
+  const n = draft.filter((x) => String(x).trim()).length;
+  return `
+    <div class="form-row">
+      <label>${esc(label)}</label>
+      <div class="tag-dd">
+        <button type="button" class="tag-trigger" data-field="${esc(field)}" data-label="${esc(label)}" data-mode="string">
+          <span class="tag-preview">${esc(tagSummary(draft))}</span>
+          <span class="meta">${n} 项 ▾</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderEditor() {
+  const container = document.getElementById("editor");
+  if (uiMode === "modules") {
+    renderModuleEditor();
+    return;
+  }
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (!cat) {
+    container.innerHTML = '<div class="empty-state">← 选择一个场景开始编辑</div>';
+    return;
+  }
+  const isIdle = cat.id === "idle_ambient";
+  const stanceIds = replyStyles.length
+    ? replyStyles.map((x) => x.id)
+    : ["engage", "soft", "deflect", "ignore"];
+  if (cat.reply_stance && !stanceIds.includes(cat.reply_stance)) {
+    stanceIds.push(cat.reply_stance);
+  }
+  const stanceOpts = stanceIds.map((s) =>
+    `<option value="${esc(s)}" ${cat.reply_stance === s ? "selected" : ""}>${esc(stanceLabel(s))}</option>`
+  ).join("");
+  const prioOpts = ["low", "medium", "high", "critical"].map((p) =>
+    `<option value="${p}" ${cat.priority === p ? "selected" : ""}>${prioLabel(p)}</option>`
+  ).join("");
+  const curStyle = replyStyles.find((x) => x.id === cat.reply_stance);
+  const canDelStyle = curStyle && !curStyle.builtin && !isIdle;
+
+  container.innerHTML = `
+    <div class="form-row">
+      <label>场景名称</label>
+      <input type="text" id="f-name" value="${esc(cat.display_name)}" ${isIdle ? "disabled" : ""}>
+    </div>
+    <div class="form-row">
+      <label>优先级</label>
+      <select id="f-priority" ${isIdle ? "disabled" : ""}>${prioOpts}</select>
+    </div>
+    ${renderTagDropdown("trigger_words", "触发词汇", cat.trigger_words || [])}
+    <div class="form-row">
+      <label>回复风格</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="f-stance" style="flex:1" ${isIdle ? "disabled" : ""}>${stanceOpts}</select>
+        <button type="button" class="btn" id="addStyleBtn" ${isIdle ? "disabled" : ""} title="新建自定义风格">＋风格</button>
+        <button type="button" class="btn btn-danger" id="delStyleBtn" ${canDelStyle ? "" : "disabled"} title="删除当前自定义风格">删风格</button>
+      </div>
+    </div>
+    ${renderTagDropdown("sample_lines", "参考台词", cat.sample_lines || [])}
+    <div class="form-row">
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="f-pivot" ${cat.forbid_pivot ? "checked" : ""}><span class="slider"></span></label>
+        <span style="font-size:13px">锁定话题（禁止Bot跑到别的话题）</span>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-danger" id="delBtn" ${isIdle ? 'disabled style="opacity:.4;cursor:not-allowed"' : ""}>删除此场景</button>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--muted)">ID: ${esc(cat.id)}</span>
+    </div>
+  `;
+
+  const nameEl = document.getElementById("f-name");
+  if (nameEl) nameEl.oninput = () => updateField("display_name", nameEl.value);
+  document.getElementById("f-priority").onchange = (e) => updateField("priority", e.target.value);
+  document.getElementById("f-stance").onchange = (e) => updateField("reply_stance", e.target.value);
+  document.getElementById("f-pivot").onchange = (e) => updateField("forbid_pivot", e.target.checked);
+  const addStyleBtn = document.getElementById("addStyleBtn");
+  if (addStyleBtn) addStyleBtn.onclick = createReplyStyle;
+  const delStyleBtn = document.getElementById("delStyleBtn");
+  if (delStyleBtn) delStyleBtn.onclick = deleteCurrentReplyStyle;
+  container.querySelectorAll(".tag-trigger").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openTagPop(btn, btn.dataset.field, btn.dataset.label);
+    };
+  });
+  const del = document.getElementById("delBtn");
+  if (del) del.onclick = deleteCategory;
+}
+
+/* ===== Tag popover ===== */
+let openPopField = null;
+let openPopKind = "string"; // string | item | fact
+
+function closeTagPop(commit) {
+  const host = document.getElementById("tagPopHost");
+  if (openPopField && commit !== false) {
+    if (openPopKind === "string") {
+      const inputs = host.querySelectorAll(".tag-row input");
+      if (inputs.length) {
+        const arr = Array.from(inputs).map((i) => i.value.trim()).filter(Boolean);
+        setTagDraft(openPopField, arr);
+        const cat = categories.find((c) => c.id === activeCatId);
+        if (cat) {
+          cat[openPopField] = arr.slice();
+          scheduleSaveCat();
+        }
+      }
+    } else {
+      const rows = host.querySelectorAll(".tag-row");
+      const arr = [];
+      rows.forEach((row) => {
+        const keyEl = row.querySelector("[data-k]");
+        const valEl = row.querySelector("[data-v]");
+        const noteEl = row.querySelector("[data-n]");
+        const it = {
+          key: keyEl ? keyEl.value.trim() : "",
+          value: valEl ? valEl.value.trim() : "",
+          note: noteEl ? noteEl.value.trim() : "",
+        };
+        if (it.key || it.value || it.note) arr.push(it);
+      });
+      const section = openPopField;
+      setModDraft(section, arr);
+      if (modulePack) {
+        modulePack[section] = arr;
+        scheduleSaveModule();
+      }
+    }
+  }
+  openPopField = null;
+  openPopKind = "string";
+  host.innerHTML = "";
+  document.querySelectorAll(".tag-trigger.open").forEach((b) => b.classList.remove("open"));
+  if (uiMode === "classify" && activeCatId) {
+    const cat = categories.find((c) => c.id === activeCatId);
+    if (cat) {
+      document.querySelectorAll(".tag-trigger").forEach((btn) => {
+        if (btn.dataset.mode && btn.dataset.mode !== "string") return;
+        const field = btn.dataset.field;
+        const draft = getTagDraft(field, cat[field] || []);
+        const n = draft.filter((x) => String(x).trim()).length;
+        btn.querySelector(".tag-preview").textContent = tagSummary(draft);
+        btn.querySelector(".meta").textContent = n + " 项 ▾";
+      });
+      renderSideList();
+    }
+  }
+  if (uiMode === "modules" && modulePack) {
+    document.querySelectorAll(".tag-trigger[data-mode]").forEach((btn) => {
+      if (btn.dataset.mode === "string") return;
+      const section = btn.dataset.field;
+      const draft = getModDraft(section, modulePack[section] || []);
+      const n = normalizeItemList(draft).length;
+      btn.querySelector(".tag-preview").textContent = itemSummary(draft);
+      btn.querySelector(".meta").textContent = n + " 项 ▾";
+    });
+  }
+}
+
+function openTagPop(anchorBtn, field, label, kind) {
+  kind = kind || anchorBtn.dataset.mode || "string";
+  if (openPopField === field && openPopKind === kind) {
+    closeTagPop(true);
+    return;
+  }
+  closeTagPop(true);
+  openPopField = field;
+  openPopKind = kind;
+  anchorBtn.classList.add("open");
+
+  const host = document.getElementById("tagPopHost");
+  const rect = anchorBtn.getBoundingClientRect();
+  const width = Math.min(kind === "string" ? 420 : 520, window.innerWidth - 24);
+  let left = rect.left;
+  if (left + width > window.innerWidth - 12) left = window.innerWidth - width - 12;
+  if (left < 12) left = 12;
+  let top = rect.bottom + 6;
+  const maxH = Math.min(480, window.innerHeight * 0.75);
+  if (top + 200 > window.innerHeight) top = Math.max(12, rect.top - maxH - 6);
+
+  host.innerHTML = `
+    <div class="tag-pop-mask" id="tagMask"></div>
+    <div class="tag-pop" id="tagPop" style="left:${left}px;top:${top}px;width:${width}px;max-height:${maxH}px">
+      <div class="tag-pop-head">
+        <strong>${esc(label)}</strong>
+        <button type="button" class="btn" id="tagCloseBtn">完成</button>
+      </div>
+      <div class="tag-pop-body" id="tagPopBody"></div>
+      <div class="tag-pop-foot">
+        <span class="hint">点外部关闭 · 可直接改文字 · 备注=实际意思</span>
+        <button type="button" class="btn btn-primary" id="tagAddBtn">+ 添加</button>
+      </div>
+    </div>
+  `;
+  const body = document.getElementById("tagPopBody");
+
+  function paintString() {
+    const cat = categories.find((c) => c.id === activeCatId);
+    const draft = getTagDraft(field, (cat && cat[field]) || []);
+    setTagDraft(field, draft);
+    if (!draft.length) {
+      body.innerHTML = '<div class="empty-state" style="padding:20px">暂无条目，点下方添加</div>';
+      return;
+    }
+    body.innerHTML = draft.map((v, i) => `
+      <div class="tag-row">
+        <input type="text" data-i="${i}" value="${esc(v)}" />
+        <button type="button" class="btn btn-danger" data-del="${i}">删除</button>
+      </div>
+    `).join("");
+    body.querySelectorAll("input").forEach((inp) => {
+      inp.oninput = () => {
+        const next = getTagDraft(field, []);
+        next[Number(inp.dataset.i)] = inp.value;
+        setTagDraft(field, next);
+      };
+    });
+    body.querySelectorAll("[data-del]").forEach((btn) => {
+      btn.onclick = () => {
+        const next = getTagDraft(field, []);
+        next.splice(Number(btn.getAttribute("data-del")), 1);
+        setTagDraft(field, next);
+        paintString();
+      };
+    });
+  }
+
+  function paintItems() {
+    const draft = getModDraft(field, (modulePack && modulePack[field]) || []);
+    setModDraft(field, draft);
+    const isFact = kind === "fact";
+    if (!draft.length) {
+      body.innerHTML = '<div class="empty-state" style="padding:20px">暂无条目，点下方添加</div>';
+      return;
+    }
+    body.innerHTML = draft.map((it, i) => `
+      <div class="tag-row" style="grid-template-columns:${isFact ? "0.7fr 1fr 1fr auto" : "1.2fr 1fr auto"}">
+        ${isFact ? `<input type="text" data-k data-i="${i}" placeholder="键" value="${esc(it.key || "")}" />` : ""}
+        <input type="text" data-v data-i="${i}" placeholder="内容" value="${esc(it.value || "")}" />
+        <input type="text" data-n data-i="${i}" placeholder="实际意思/备注" value="${esc(it.note || "")}" />
+        <button type="button" class="btn btn-danger" data-del="${i}">删除</button>
+      </div>
+    `).join("");
+    const sync = () => {
+      const next = [];
+      body.querySelectorAll(".tag-row").forEach((row) => {
+        next.push({
+          key: row.querySelector("[data-k]") ? row.querySelector("[data-k]").value : "",
+          value: row.querySelector("[data-v]") ? row.querySelector("[data-v]").value : "",
+          note: row.querySelector("[data-n]") ? row.querySelector("[data-n]").value : "",
+        });
+      });
+      setModDraft(field, next);
+    };
+    body.querySelectorAll("input").forEach((inp) => { inp.oninput = sync; });
+    body.querySelectorAll("[data-del]").forEach((btn) => {
+      btn.onclick = () => {
+        const next = getModDraft(field, []);
+        next.splice(Number(btn.getAttribute("data-del")), 1);
+        setModDraft(field, next);
+        paintItems();
+      };
+    });
+  }
+
+  if (kind === "string") paintString();
+  else paintItems();
+
+  document.getElementById("tagMask").onclick = () => closeTagPop(true);
+  document.getElementById("tagCloseBtn").onclick = () => closeTagPop(true);
+  document.getElementById("tagAddBtn").onclick = () => {
+    if (kind === "string") {
+      const next = getTagDraft(field, []);
+      next.push("");
+      setTagDraft(field, next);
+      paintString();
+    } else {
+      const next = getModDraft(field, []);
+      next.push({ key: "", value: "", note: "" });
+      setModDraft(field, next);
+      paintItems();
+    }
+    const inputs = body.querySelectorAll("input");
+    const last = inputs[inputs.length - (kind === "string" ? 1 : (kind === "fact" ? 3 : 2))];
+    if (last) last.focus();
+  };
+  document.getElementById("tagPop").onclick = (e) => e.stopPropagation();
+}
+
+function updateField(key, value) {
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (cat) cat[key] = value;
+  renderSideList();
+  scheduleSaveCat();
+}
+function scheduleSaveCat() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveCurrentCat(), 400);
+}
+
+async function saveCurrentCat() {
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (!cat) return;
+  // merge drafts
+  ["trigger_words", "sample_lines"].forEach((f) => {
+    if (Object.prototype.hasOwnProperty.call(tagDraftCache, cacheKey(f))) {
+      cat[f] = getTagDraft(f, cat[f] || []).map((x) => String(x).trim()).filter(Boolean);
+      setTagDraft(f, cat[f]);
+    }
+  });
+  try {
+    const payload = {
+      display_name: cat.display_name,
+      priority: cat.priority,
+      trigger_words: cat.trigger_words || [],
+      reply_stance: cat.reply_stance,
+      mode_hints: cat.mode_hints || [],
+      sample_lines: cat.sample_lines || [],
+      forbid_pivot: !!cat.forbid_pivot,
+    };
+    const updated = await apiSemantic("PUT", "/categories/" + encodeURIComponent(cat.id), payload);
+    Object.assign(cat, updated);
+    clearTagDraft("trigger_words");
+    clearTagDraft("sample_lines");
+    setTagDraft("trigger_words", cat.trigger_words || []);
+    setTagDraft("sample_lines", cat.sample_lines || []);
+    renderSideList();
+    toast("已保存");
+  } catch (e) {
+    toast("保存失败: " + e.message, false);
+  }
+}
+
+async function addCategory() {
+  try {
+    const newCat = await apiSemantic("POST", "/categories", {
+      display_name: "新场景",
+      priority: "medium",
+      trigger_words: [],
+      reply_stance: "engage",
+      mode_hints: ["direct"],
+      sample_lines: [],
+      forbid_pivot: false,
+    });
+    categories.push(newCat);
+    activeCatId = newCat.id;
+    renderSideList();
+    renderEditor();
+    toast("已创建新场景");
+  } catch (e) {
+    toast("创建失败: " + e.message, false);
+  }
+}
+
+async function createReplyStyle() {
+  const id = prompt("风格 ID（小写字母开头，仅 a-z0-9_-）", "warm_tease");
+  if (!id) return;
+  const label = prompt("显示名", "温柔调侃");
+  if (!label) return;
+  const base = prompt("落到哪条内置行为？engage / soft / deflect / ignore", "soft");
+  if (!base) return;
+  try {
+    const created = await apiSemantic("POST", "/reply-styles", {
+      id: id.trim(),
+      label: label.trim(),
+      base: base.trim(),
+    });
+    await loadReplyStyles();
+    updateField("reply_stance", created.id);
+    renderEditor();
+    toast("已新增风格「" + created.label + "」");
+  } catch (e) {
+    toast("新增风格失败: " + e.message, false);
+  }
+}
+
+async function deleteCurrentReplyStyle() {
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (!cat) return;
+  const style = replyStyles.find((x) => x.id === cat.reply_stance);
+  if (!style || style.builtin) return;
+  if (!confirm("删除自定义风格「" + style.label + "」？需先确保无其它场景占用。")) return;
+  try {
+    await apiSemantic("DELETE", "/reply-styles/" + encodeURIComponent(style.id));
+    await loadReplyStyles();
+    updateField("reply_stance", "soft");
+    renderEditor();
+    toast("已删除风格");
+  } catch (e) {
+    toast("删除失败: " + e.message, false);
+  }
+}
+
+async function deleteCategory() {
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (!cat || cat.id === "idle_ambient") return;
+  if (!confirm("确定删除「" + cat.display_name + "」？")) return;
+  try {
+    await apiSemantic("DELETE", "/categories/" + encodeURIComponent(cat.id));
+    clearTagDraft("trigger_words");
+    clearTagDraft("sample_lines");
+    categories = categories.filter((c) => c.id !== activeCatId);
+    activeCatId = categories[0] ? categories[0].id : null;
+    renderSideList();
+    renderEditor();
+    toast("已删除");
+  } catch (e) {
+    toast("删除失败: " + e.message, false);
+  }
+}
+
+function onSensitivityChange(val) {
+  document.getElementById("sensitivity-val").textContent = val;
+  clearTimeout(sensTimer);
+  sensTimer = setTimeout(async () => {
+    try {
+      await apiSemantic("PUT", "/config", { sensitivity: Number(val) });
+      sensitivity = Number(val);
+      toast("灵敏度已更新");
+    } catch (e) {
+      toast("更新失败: " + e.message, false);
+    }
+  }, 500);
+}
+
+async function runTest() {
+  const text = document.getElementById("test-text").value.trim();
+  if (!text) return;
+  const resultDiv = document.getElementById("test-result");
+  const promptBox = document.getElementById("prompt-preview");
+  resultDiv.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px">分析中…</div>';
+  promptBox.textContent = "生成中…";
+  try {
+    const res = await apiSemantic("POST", "/classify", { text });
+    const hit = res.is_hit;
+    const pct = Math.round((res.confidence || 0) * 100);
+    const color = hit ? "var(--green)" : "var(--muted)";
+    resultDiv.innerHTML = `
+      <div class="result-card ${hit ? "hit" : "miss"}">
+        <div class="result-header">
+          <span class="result-title">${esc(res.matched_category.display_name)}</span>
+          <span class="result-badge ${hit ? "badge-hit" : "badge-miss"}">${hit ? "命中" : "未命中"}</span>
+        </div>
+        <div class="result-meta">置信度 ${pct}% · 姿态: ${esc(res.matched_category.reply_stance)} · ID: ${esc(res.matched_category.id)}</div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>`;
+    promptBox.textContent = res.generated_prompt || "(无)";
+  } catch (e) {
+    resultDiv.innerHTML = `<div class="result-card miss"><div class="result-title" style="color:var(--accent)">请求失败</div><div class="result-meta">${esc(e.message)}</div></div>`;
+    promptBox.textContent = "";
+  }
+}
+function clearTest() {
+  document.getElementById("test-result").innerHTML = "";
+  document.getElementById("prompt-preview").textContent = "点击「测试」后此处显示生成的 Prompt";
+  document.getElementById("test-text").value = "";
+}
+function exportYAML() {
+  const token = getToken();
+  let url = semanticRoot() + "/" + currentPersona + "/export";
+  if (token) url += "?auth_token=" + encodeURIComponent(token);
+  window.open(url, "_blank");
+}
+
+/* ===== Persona modules (PERSONA_PACK form) ===== */
+async function loadModulesAndOpen() {
+  try {
+    const data = await apiPersona("GET", "/catalog");
+    const ch = (data.characters || []).find((c) => c.id === currentPersona) || (data.characters || [])[0];
+    modules = (ch && ch.modules) || [];
+    if (!activeModuleId || !modules.find((m) => m.id === activeModuleId)) {
+      activeModuleId = modules[0] ? modules[0].id : null;
+    }
+    renderSideList();
+    if (activeModuleId) await openModule(activeModuleId, true);
+    else renderModuleEditor();
+  } catch (e) {
+    toast("加载人设模块失败: " + e.message, false);
+  }
+}
+
+async function openModule(id, force) {
+  if (!force && moduleDirty && id !== activeModuleId) {
+    if (!confirm("当前人设有未保存修改，确定切换？")) return;
+  }
+  closeTagPop(true);
+  activeModuleId = id;
+  clearModDrafts();
+  renderSideList();
+  try {
+    const doc = await apiPersona("GET", "/" + currentPersona + "/modules/" + encodeURIComponent(id));
+    moduleSections = doc.sections || [];
+    modulePack = doc.pack || { module: id };
+    modulePack.module = id;
+    moduleSections.forEach((sec) => {
+      modulePack[sec.key] = normalizeItemList(modulePack[sec.key] || []);
+      setModDraft(sec.key, modulePack[sec.key]);
+    });
+    moduleLoadedSnapshot = JSON.stringify(modulePack);
+    moduleDirty = false;
+    document.getElementById("moduleHint").textContent = doc.hint || "—";
+    document.getElementById("moduleWhen").textContent = doc.when || "—";
+    modules = modules.map((m) => (m.id === id ? Object.assign({}, m, {
+      label: doc.label || m.label,
+      when: doc.when || m.when,
+      hint: doc.hint || m.hint,
+      bytes: doc.bytes,
+      updated_at: doc.updated_at,
+    }) : m));
+    renderSideList();
+    renderModuleEditor();
+  } catch (e) {
+    toast("打开模块失败: " + e.message, false);
+  }
+}
+
+function renderModDropdown(sec) {
+  const draft = getModDraft(sec.key, (modulePack && modulePack[sec.key]) || []);
+  const n = normalizeItemList(draft).length;
+  return `
+    <div class="form-row">
+      <label>${esc(sec.label)}</label>
+      <div class="tag-dd">
+        <button type="button" class="tag-trigger" data-field="${esc(sec.key)}" data-label="${esc(sec.label)}" data-mode="${esc(sec.kind || "item")}">
+          <span class="tag-preview">${esc(itemSummary(draft))}</span>
+          <span class="meta">${n} 项 ▾</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderModuleEditor() {
+  const container = document.getElementById("editor");
+  if (!activeModuleId || !modulePack) {
+    container.innerHTML = '<div class="empty-state">← 选择一个人设模块</div>';
+    return;
+  }
+  const meta = modules.find((m) => m.id === activeModuleId) || { id: activeModuleId, label: activeModuleId };
+  const sections = moduleSections.length
+    ? moduleSections
+    : Object.keys(modulePack).filter((k) => k !== "module").map((k) => ({ key: k, label: k, kind: "item" }));
+
+  container.innerHTML = `
+    <div class="form-row" style="margin-bottom:8px">
+      <label>${esc(meta.label || meta.id)} <span style="text-transform:none;font-weight:400">（${esc(meta.id)}）</span></label>
+      <div style="font-size:12px;color:var(--muted)">${esc(meta.when || "")}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">分条填写；base 保存为 &lt;role&gt; XML，其它模块为 [PERSONA_PACK]。</div>
+    </div>
+    ${sections.map(renderModDropdown).join("")}
+    <div class="form-actions">
+      <span style="font-size:11px;color:var(--muted)" id="moduleMeta">
+        ${meta.bytes ? meta.bytes + " 字节" : "—"}${meta.updated_at ? " · " + meta.updated_at : ""}${moduleDirty ? " · 未保存" : ""}
+      </span>
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-primary" id="saveModuleInline">保存人设块</button>
+    </div>
+  `;
+  container.querySelectorAll(".tag-trigger").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openTagPop(btn, btn.dataset.field, btn.dataset.label, btn.dataset.mode);
+    };
+  });
+  document.getElementById("saveModuleInline").onclick = saveModule;
+}
+
+function scheduleSaveModule() {
+  moduleDirty = true;
+  const metaEl = document.getElementById("moduleMeta");
+  if (metaEl && !metaEl.textContent.includes("未保存")) {
+    metaEl.textContent += " · 未保存";
+  }
+  clearTimeout(moduleSaveTimer);
+  moduleSaveTimer = setTimeout(() => saveModule(), 600);
+}
+
+async function saveModule() {
+  if (!activeModuleId || !modulePack) return;
+  closeTagPop(true);
+  moduleSections.forEach((sec) => {
+    modulePack[sec.key] = normalizeItemList(getModDraft(sec.key, modulePack[sec.key] || []));
+    setModDraft(sec.key, modulePack[sec.key]);
+  });
+  try {
+    const saved = await apiPersona("PUT", "/" + currentPersona + "/modules/" + encodeURIComponent(activeModuleId), {
+      pack: modulePack,
+    });
+    modulePack = saved.pack || modulePack;
+    moduleSections = saved.sections || moduleSections;
+    moduleSections.forEach((sec) => {
+      modulePack[sec.key] = normalizeItemList(modulePack[sec.key] || []);
+      setModDraft(sec.key, modulePack[sec.key]);
+    });
+    moduleLoadedSnapshot = JSON.stringify(modulePack);
+    moduleDirty = false;
+    modules = modules.map((m) => (m.id === activeModuleId ? Object.assign({}, m, {
+      bytes: saved.bytes,
+      updated_at: saved.updated_at,
+      label: saved.label || m.label,
+      when: saved.when || m.when,
+    }) : m));
+    renderSideList();
+    renderModuleEditor();
+    toast("人设块已保存");
+  } catch (e) {
+    toast("保存失败: " + e.message, false);
+  }
+}
+
+/* ===== Wire ===== */
+document.getElementById("homeBtn").onclick = (e) => {
+  e.preventDefault();
+  if (moduleDirty && !confirm("有未保存修改，确定离开？")) return;
+  location.assign(homeUrl());
+};
+document.getElementById("exportBtn").onclick = exportYAML;
+document.getElementById("addBtn").onclick = addCategory;
+document.getElementById("testBtn").onclick = runTest;
+document.getElementById("saveModuleBtn").onclick = saveModule;
+document.getElementById("test-text").onkeydown = (e) => {
+  if (e.key === "Enter") runTest();
+};
+document.getElementById("sensitivity-slider").oninput = (e) => onSensitivityChange(e.target.value);
+document.querySelectorAll(".persona-btn").forEach((b) => {
+  b.onclick = () => switchPersona(b.dataset.persona);
+});
+document.querySelectorAll(".mode-btn").forEach((b) => {
+  b.onclick = () => setMode(b.dataset.mode);
+});
+window.addEventListener("beforeunload", (e) => {
+  if (!moduleDirty) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
+window.addEventListener("resize", () => {
+  if (openPopField) closeTagPop(true);
+});
+
+(async () => {
+  await loadConfig();
+  await loadReplyStyles();
+  await loadCategories();
+})();
+</script>
+</body>
+</html>

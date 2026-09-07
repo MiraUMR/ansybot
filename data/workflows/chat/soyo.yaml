@@ -1,0 +1,464 @@
+name: 聊天 - 长崎素世
+description: 扮演长崎素世。同性恋，喜欢千早爱音。仅素世 NapCat 发送。
+blocks:
+- type: internal:get_message
+  name: get_message
+  params: {}
+  position:
+    x: 100
+    y: 138
+  connected_to:
+  - target: ToggleEditState_hr11gv
+    mapping:
+      from: sender
+      to: sender
+  - target: query_memory
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: gated_chat_memory
+    mapping:
+      from: msg
+      to: user_msg
+  - target: query_world_state
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: apply_world_state
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: apply_world_state
+    mapping:
+      from: msg
+      to: user_msg
+  - target: dialogue_context
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: dialogue_context
+    mapping:
+      from: msg
+      to: user_msg
+  - target: query_scene_context
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: append_scene_context
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: append_scene_context
+    mapping:
+      from: msg
+      to: user_msg
+  - target: persona_layers
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: guard_character_reply
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: msg
+      to: user_msg
+- type: internal:chat_memory_query
+  name: query_memory
+  params:
+    scope_type: soyo_group
+  position:
+    x: 530
+    y: 338
+  connected_to:
+  - target: gate_memory_query
+    mapping:
+      from: memory_content
+      to: memory_content
+- type: internal:chat_message_constructor
+  name: ChatMessageConstructor_kcjgyy
+  params: {}
+  position:
+    x: 960
+    y: 138
+  connected_to:
+  - target: llm_chat
+    mapping:
+      from: llm_msg
+      to: prompt
+  - target: guard_character_reply
+    mapping:
+      from: llm_msg
+      to: prompt
+- type: internal:chat_response_converter
+  name: ChatResponseConverter_23c2qz
+  params: {}
+  position:
+    x: 1710
+    y: 138
+  connected_to:
+  - target: SendSoyoBot
+    mapping:
+      from: msg
+      to: msg
+- type: internal:text_block
+  name: 本轮用户发言
+  params:
+    text: '{user_name}在群{group_name}对你说：{user_msg}'
+  position:
+    x: 100
+    y: 530
+  connected_to:
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: text
+      to: user_prompt_format
+- type: internal:toggle_edit_state
+  name: ToggleEditState_hr11gv
+  params:
+    is_editing: true
+  position:
+    x: 530
+    y: 138
+  connected_to: []
+- type: world_state:gated_memory
+  name: gated_chat_memory
+  params:
+    scope_type: soyo_group
+  position:
+    x: 1710
+    y: 306
+  connected_to: []
+- type: internal:chat_completion
+  name: llm_chat
+  params:
+    enable_model_failover: true
+  position:
+    x: 1280
+    y: 138
+  connected_to:
+  - target: guard_character_reply
+    mapping:
+      from: resp
+      to: llm_resp
+- type: world_state:query
+  name: query_world_state
+  params:
+    character: soyo
+  position:
+    x: 530
+    y: 530
+  connected_to:
+  - target: 拼接本群关系事实
+    mapping:
+      from: text
+      to: text2
+- type: world_state:apply
+  name: apply_world_state
+  params:
+    character: soyo
+  position:
+    x: 1480
+    y: 138
+  connected_to:
+  - target: ChatResponseConverter_23c2qz
+    mapping:
+      from: llm_resp
+      to: resp
+  - target: gated_chat_memory
+    mapping:
+      from: llm_resp
+      to: llm_resp
+  - target: extract_world_state
+    mapping:
+      from: llm_resp
+      to: llm_resp
+  - target: extract_world_state
+    mapping:
+      from: user_msg
+      to: user_msg
+  - target: extract_world_state
+    mapping:
+      from: chat_sender
+      to: chat_sender
+  - target: append_scene_context
+    mapping:
+      from: llm_resp
+      to: llm_resp
+- type: internal:text_block
+  name: 本群长期关系导语
+  params:
+    text: '# 本群长期关系（仅本群有效，高于后文所有暗恋描写）
+
+      下面是这个群已经发生的事实。若写了已告白或正在交往：必须按告白之后相处。有人问「什么时候告白」「有没有表白」要当作已经发生过，不许再装还没说。
+
+      没有条目时，默认彼此喜欢、尚未正式说破；告白、被接受、开始交往都是正常发展，不要人为卡死在永远说不出口。该承认时可以承认，害羞不等于拒绝。
+
+
+      '
+  position:
+    x: 80
+    y: 520
+  connected_to:
+  - target: 拼接本群关系事实
+    mapping:
+      from: text
+      to: text1
+- type: internal:text_block
+  name: 当场上下文（群名·时间·近期聊天）
+  params:
+    text: '# 当前群聊
+
+      你现在在群「{group_name}」（群号 {group_id}）。只根据这个群正在发生的对话和本群记忆回复，不要把另一个群的群友、话题或称呼带到这里。
+
+
+      被@走 Trigger；场面/环境用感知直接反应；同伴互聊走 Companion。不要解说系统标签，不要当导演复盘。
+
+
+      # 当前信息
+
+      现在时间：{current_date_time}
+
+      对话对象：{dialogue_target}
+
+
+      # 近期聊天（仅同伴与被@的真人对话；不含环境旁白）
+
+      以下是之前的对话，用来延续语气和刚聊过的事，不要当众整段复读，也不要用它推翻「本群长期关系」。
+
+      -- 对话记录开始 --
+
+      {memory_content}
+
+      -- 对话记录结束 --
+
+
+      '
+  position:
+    x: 80
+    y: 920
+  connected_to:
+  - target: 拼接当场上下文
+    mapping:
+      from: text
+      to: text2
+- type: internal:text_block
+  name: 回复规则（分段符与记忆标记）
+  params:
+    text: '记住：`<break>` 只是发消息的分段标记，不要向用户解释这个符号。
+
+
+      # 模式分流（路由）
+
+      - [P0] / EXTERNAL_TRIGGER → 禁止群友问答体，只做角色反应；有 peer_interaction 仲裁则类型3直出
+
+      - 同伴互聊 → 接话；接近互聊上限时短句收束，勿硬抛新话题
+
+      - 【当前环境】→ 默认自语；约四成可 @同伴续聊（受互聊轮次/冷却约束）；勿括号旁白
+
+      - 故事模式 → 勿用「就这样/知道了」封死场面；仅发起人 end/结束/stop 整段结束
+
+
+      # 长期设定更新（用户看不见）
+
+      同伴互聊出现告白/接受/交往/重要约定等进展时，回复最末尾追加（不要解释、不要念出来）。没有变化整段不写。
+
+      格式：
+
+      <<STATE
+
+      SET relationship 一句话写清当前关系阶段
+
+      >>
+
+      SET 覆盖同名条目，DEL key 删除。key 用英文小写下划线。嘴里禁止说「我记下了」。
+
+      现在继续以长崎素世本人行动。
+
+
+      '
+  position:
+    x: 80
+    y: 1100
+  connected_to:
+  - target: 拼成完整系统提示词
+    mapping:
+      from: text
+      to: text2
+- type: internal:text_concat_block
+  name: 拼接本群关系事实
+  params: {}
+  position:
+    x: 420
+    y: 520
+  connected_to:
+  - target: 拼接人设与本群关系
+    mapping:
+      from: text
+      to: text2
+- type: internal:text_concat_block
+  name: 拼接人设与本群关系
+  params: {}
+  position:
+    x: 680
+    y: 300
+  connected_to:
+  - target: 拼接当场上下文
+    mapping:
+      from: text
+      to: text1
+- type: internal:text_concat_block
+  name: 拼接当场上下文
+  params: {}
+  position:
+    x: 1200
+    y: 300
+  connected_to:
+  - target: 拼成完整系统提示词
+    mapping:
+      from: text
+      to: text1
+- type: internal:text_concat_block
+  name: 拼成完整系统提示词
+  params: {}
+  position:
+    x: 1460
+    y: 300
+  connected_to:
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: text
+      to: system_prompt_format
+- type: world_state:extract
+  name: extract_world_state
+  params:
+    always: true
+    character: soyo
+  position:
+    x: 1710
+    y: 450
+  connected_to: []
+- type: world_state:dialogue
+  name: dialogue_context
+  params:
+    character: soyo
+  position:
+    x: 530
+    y: 700
+  connected_to:
+  - target: persona_layers
+    mapping:
+      from: message_mode
+      to: message_mode
+  - target: persona_layers
+    mapping:
+      from: interaction_mode
+      to: interaction_mode
+  - target: gate_memory_query
+    mapping:
+      from: message_mode
+      to: message_mode
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: text
+      to: dialogue_target
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: user_prompt_text
+      to: user_prompt_text
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: critical_instruction
+      to: critical_instruction
+  - target: gated_chat_memory
+    mapping:
+      from: skip_chat_memory
+      to: skip_chat_memory
+  - target: extract_world_state
+    mapping:
+      from: extract_priority
+      to: extract_priority
+  - target: append_scene_context
+    mapping:
+      from: message_mode
+      to: message_mode
+  - target: append_scene_context
+    mapping:
+      from: narration
+      to: narration
+  - target: append_scene_context
+    mapping:
+      from: narration_source
+      to: narration_source
+  - target: guard_character_reply
+    mapping:
+      from: message_mode
+      to: message_mode
+- type: world_state:query_scene
+  name: query_scene_context
+  params:
+    character: soyo
+  position:
+    x: 530
+    y: 860
+  connected_to:
+  - target: persona_layers
+    mapping:
+      from: text
+      to: current_scene
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: text
+      to: current_scene
+- type: world_state:append_scene
+  name: append_scene_context
+  params:
+    character: soyo
+  position:
+    x: 1710
+    y: 520
+  connected_to: []
+- type: world_state:persona_layers
+  name: persona_layers
+  params:
+    character: soyo
+  position:
+    x: 530
+    y: 300
+  connected_to:
+  - target: 拼接人设与本群关系
+    mapping:
+      from: text
+      to: text1
+- type: world_state:guard_reply
+  name: guard_character_reply
+  params:
+    character: soyo
+  position:
+    x: 1380
+    y: 138
+  connected_to:
+  - target: apply_world_state
+    mapping:
+      from: llm_resp
+      to: llm_resp
+- type: world_state:gate_memory
+  name: gate_memory_query
+  params: {}
+  position:
+    x: 740
+    y: 338
+  connected_to:
+  - target: ChatMessageConstructor_kcjgyy
+    mapping:
+      from: memory_content
+      to: memory_content
+- type: internal:send_message
+  name: SendSoyoBot
+  params:
+    im_name: qq_soyo
+  position:
+    x: 2140
+    y: 60
+  connected_to: []

@@ -1,0 +1,10 @@
+# 复制为 data/world_state/_config.yaml 后生效。不复制则用下面默认值。
+
+# 留空 = 群里任何人都能 /长期记忆 设定|删除|清空。填写 QQ 号则仅这些人能改（查看仍开放）。
+admin_ids: []
+
+# 每个群最多保存多少条长期设定
+max_facts_per_group: 40
+
+# 单条内容最长字数
+max_text_length: 300

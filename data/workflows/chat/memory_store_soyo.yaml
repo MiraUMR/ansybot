@@ -1,0 +1,54 @@
+name: 记录聊天内容（soyo）
+description: 仅同伴/@ 写入对话记忆；长期抽取写入 soyo 作用域。
+blocks:
+- type: internal:get_message
+  name: get_message
+  params: {}
+  position:
+    x: 100
+    y: 138
+  connected_to:
+  - target: filter_fallback_memory
+    mapping:
+      from: msg
+      to: user_msg
+  - target: extract_user_world_state
+    mapping:
+      from: msg
+      to: user_msg
+  - target: extract_user_world_state
+    mapping:
+      from: sender
+      to: chat_sender
+- type: world_state:filter_fallback_memory
+  name: filter_fallback_memory
+  params:
+    character: soyo
+  position:
+    x: 320
+    y: 138
+  connected_to:
+  - target: gated_chat_memory
+    mapping:
+      from: user_msg
+      to: user_msg
+  - target: gated_chat_memory
+    mapping:
+      from: skip_chat_memory
+      to: skip_chat_memory
+- type: world_state:gated_memory
+  name: gated_chat_memory
+  params:
+    scope_type: soyo_group
+  position:
+    x: 560
+    y: 138
+  connected_to: []
+- type: world_state:extract_user
+  name: extract_user_world_state
+  params:
+    character: soyo
+  position:
+    x: 420
+    y: 300
+  connected_to: []

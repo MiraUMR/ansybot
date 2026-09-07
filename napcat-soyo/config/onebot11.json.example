@@ -1,0 +1,25 @@
+{
+  "network": {
+    "httpServers": [],
+    "httpSseServers": [],
+    "httpClients": [],
+    "websocketServers": [],
+    "websocketClients": [
+      {
+        "enable": true,
+        "name": "kirara",
+        "url": "ws://kirara-qq-bot:8080/im/websocket/onebot/qquser02/ws",
+        "reportSelfMessage": false,
+        "messagePostFormat": "array",
+        "token": "YOUR_ONEBOT_ACCESS_TOKEN",
+        "debug": false,
+        "heartInterval": 30000,
+        "reconnectInterval": 5000
+      }
+    ],
+    "plugins": []
+  },
+  "musicSignUrl": "",
+  "enableLocalFile2Url": false,
+  "parseMultMsg": false
+}

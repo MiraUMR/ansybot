@@ -1,0 +1,67 @@
+# Kirara AI 配置模板
+# 复制为 data/config.yaml 后填写密钥，或直接运行 初始化.cmd 从旧 NoneBot 配置自动生成。
+# 文档：https://kirara-docs.app.lss233.com/guide/configuration/
+
+ims:
+  - name: qq_official_bot
+    enable: true
+    adapter: qqbot
+    config:
+      app_id: "YOUR_QQ_APP_ID"
+      app_secret: "YOUR_QQ_APP_SECRET"
+      token: "YOUR_QQ_TOKEN"
+      sandbox: true
+      webhook_url: /im/webhook/qqbot/qqbot01/
+  - name: qq_user_bot
+    enable: true
+    adapter: onebot
+    config:
+      websocket_url: /im/websocket/onebot/qquser01/ws
+      access_token: "YOUR_ONEBOT_ACCESS_TOKEN"
+      heartbeat_interval: 15
+  - name: qq_soyo
+    enable: true
+    adapter: onebot
+    config:
+      websocket_url: /im/websocket/onebot/qquser02/ws
+      access_token: "YOUR_SOYO_ONEBOT_ACCESS_TOKEN"
+      heartbeat_interval: 15
+
+plugins:
+  enable:
+    - im_onebot_adapters
+
+web:
+  host: "0.0.0.0"
+  port: 8080
+  secret_key: "please-change-this-to-a-secure-secret-key"
+  password_file: ./data/web/password.hash
+
+llms:
+  api_backends:
+    - name: deepseek-official
+      adapter: deepseek
+      enable: false
+      config:
+        api_key: "YOUR_LLM_API_KEY"
+        api_base: "https://api.deepseek.com/v1"
+      models:
+        - deepseek-chat
+
+defaults:
+  llm_model: deepseek-chat
+
+memory:
+  persistence:
+    type: file
+    file:
+      storage_dir: ./data/memory
+  max_entries: 100
+  default_scope: member
+
+system:
+  timezone: Asia/Shanghai
+
+update:
+  pypi_registry: https://pypi.org/simple
+  npm_registry: https://registry.npmjs.org

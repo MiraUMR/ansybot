@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>模型优先级</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --bg: #fff;
+      --card: #f6f8fa; --accent: #0969da; --danger: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #e6edf3; --muted: #8b949e; --line: #30363d; --bg: #0d1117;
+        --card: #161b22; --accent: #2f81f7; --danger: #f85149;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+    header { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    h1 { font-size: 18px; margin: 0; font-weight: 600; }
+    .muted { color: var(--muted); }
+    main { padding: 20px; display: grid; gap: 20px; grid-template-columns: 1fr 1fr; max-width: 1100px; }
+    @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+    section { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 14px; }
+    h2 { margin: 0 0 8px; font-size: 15px; }
+    button, select, input { font: inherit; }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+      padding: 6px 12px; cursor: pointer;
+    }
+    button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+    button.danger { background: var(--danger); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .row { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; align-items: center; }
+    .list { list-style: none; margin: 0; padding: 0; min-height: 48px; }
+    .item {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; background: var(--bg);
+    }
+    .item .name { flex: 1; word-break: break-all; }
+    .rank { width: 22px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    #err { color: var(--danger); margin: 0 20px; min-height: 1.2em; }
+    #ok { color: #1a7f37; margin: 0 20px; min-height: 1.2em; }
+    select, input[type="text"] {
+      min-width: 160px; padding: 6px 8px; border: 1px solid var(--line);
+      border-radius: 6px; background: var(--bg); color: inherit; flex: 1;
+    }
+    select.backend { flex: 0 0 120px; min-width: 120px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip {
+      border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px;
+      background: var(--bg); font-size: 12px;
+    }
+    .chip.unused { border-color: var(--accent); color: var(--accent); }
+    #allModels { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>优先级调整</h1>
+    <span class="muted">格式「平台/模型」（如 阿里/ZHIPU/GLM-5.3-Flash）。手动添加须选服务商；点保存会写入该后端 models。未保存就刷新会丢失。</span>
+    <button type="button" id="reloadBtn" class="ghost">刷新</button>
+    <button type="button" id="saveBtn">保存</button>
+  </header>
+  <p id="err"></p>
+  <p id="ok"></p>
+  <main>
+    <section>
+      <h2>文本回复</h2>
+      <p class="muted">聊天默认走这里的第一名。</p>
+      <div class="row">
+        <select id="textPick"></select>
+        <button type="button" id="textAdd">添加</button>
+      </div>
+      <div class="row">
+        <select id="textBackend" class="backend" title="服务商"></select>
+        <input type="text" id="textManual" placeholder="上游模型名，如 ZHIPU/GLM-5.3-Flash" />
+        <button type="button" id="textManualAdd" class="ghost">手动添加并保存</button>
+      </div>
+      <ol class="list" id="textList"></ol>
+    </section>
+    <section>
+      <h2>识图模型</h2>
+      <p class="muted">仅当消息带图时使用。</p>
+      <div class="row">
+        <select id="visionPick"></select>
+        <button type="button" id="visionAdd">添加</button>
+      </div>
+      <div class="row">
+        <select id="visionBackend" class="backend" title="服务商"></select>
+        <input type="text" id="visionManual" placeholder="上游模型名，如 qwen3-vl-plus" />
+        <button type="button" id="visionManualAdd" class="ghost">手动添加并保存</button>
+      </div>
+      <ol class="list" id="visionList"></ol>
+    </section>
+    <section id="allModels">
+      <h2>模型管理中的模型</h2>
+      <p class="muted">来自已启用后端；蓝色描边表示尚未进入上方列表。</p>
+      <div class="chips" id="availableChips"></div>
+    </section>
+  </main>
+  <script>
+    function qqbotPrefix() {
+      if (location.pathname.startsWith("/qqbot/")) return "/qqbot";
+      return "";
+    }
+    function apiBase() {
+      if (location.pathname.includes("/backend-api/api/llm")) {
+        return location.pathname.replace(/\/priority\/ui\/?$/, "");
+      }
+      return qqbotPrefix() + "/backend-api/api/llm";
+    }
+    function getToken() {
+      const q = new URLSearchParams(location.search).get("auth_token");
+      if (q) {
+        try { localStorage.setItem("token", q); } catch (e) {}
+        return q;
+      }
+      return localStorage.getItem("token") || "";
+    }
+    const err = document.getElementById("err");
+    const ok = document.getElementById("ok");
+    let state = { text: [], vision: [], available: [], backends: [] };
+    let dirty = false;
+
+    function showError(e) {
+      err.textContent = (e && e.message) ? e.message : String(e || "出错");
+      ok.textContent = "";
+    }
+    function showOk(msg) {
+      ok.textContent = msg || "";
+      err.textContent = "";
+    }
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+      const token = getToken();
+      let url = apiBase() + path;
+      if (token) {
+        headers.Authorization = "Bearer " + token;
+        const joiner = url.includes("?") ? "&" : "?";
+        url = url + joiner + "auth_token=" + encodeURIComponent(token);
+      }
+      const res = await fetch(url, Object.assign({}, opts, { headers }));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && data.error) || res.statusText || "请求失败");
+      return data;
+    }
+
+    function move(arr, i, delta) {
+      const j = i + delta;
+      if (j < 0 || j >= arr.length) return;
+      const t = arr[i];
+      arr[i] = arr[j];
+      arr[j] = t;
+      dirty = true;
+    }
+
+    function renderList(elId, key) {
+      const el = document.getElementById(elId);
+      el.innerHTML = "";
+      state[key].forEach((name, i) => {
+        const li = document.createElement("li");
+        li.className = "item";
+        li.innerHTML =
+          '<span class="rank">' + (i + 1) + "</span>" +
+          '<span class="name"></span>' +
+          '<button type="button" class="ghost" data-act="up">上移</button>' +
+          '<button type="button" class="ghost" data-act="down">下移</button>' +
+          '<button type="button" class="danger" data-act="del">移除</button>';
+        li.querySelector(".name").textContent = name;
+        li.addEventListener("click", (ev) => {
+          const act = ev.target && ev.target.getAttribute("data-act");
+          if (!act) return;
+          if (act === "up") move(state[key], i, -1);
+          if (act === "down") move(state[key], i, 1);
+          if (act === "del") { state[key].splice(i, 1); dirty = true; }
+          renderAll();
+        });
+        el.appendChild(li);
+      });
+      if (!state[key].length) {
+        const empty = document.createElement("li");
+        empty.className = "muted";
+        empty.textContent = "暂无，请从下方添加模型。";
+        el.appendChild(empty);
+      }
+    }
+
+    function fillSelect(selId, used) {
+      const sel = document.getElementById(selId);
+      const usedSet = new Set(used);
+      const options = state.available.filter((m) => !usedSet.has(m));
+      sel.innerHTML = "";
+      if (!options.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = state.available.length
+          ? "该列表已包含全部可选模型（可用手动输入添加）"
+          : "没有可添加的模型（请先在模型管理保存，再点刷新）";
+        sel.appendChild(opt);
+        sel.disabled = true;
+        return;
+      }
+      sel.disabled = false;
+      options.forEach((m) => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+      });
+    }
+
+    function fillBackendSelects() {
+      ["textBackend", "visionBackend"].forEach((id) => {
+        const sel = document.getElementById(id);
+        const prev = sel.value;
+        sel.innerHTML = "";
+        if (!state.backends.length) {
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "无服务商";
+          sel.appendChild(opt);
+          sel.disabled = true;
+          return;
+        }
+        sel.disabled = false;
+        state.backends.forEach((b) => {
+          const opt = document.createElement("option");
+          opt.value = b;
+          opt.textContent = b;
+          sel.appendChild(opt);
+        });
+        if (prev && state.backends.includes(prev)) sel.value = prev;
+        else if (state.backends.includes("阿里")) sel.value = "阿里";
+      });
+    }
+
+    function renderChips() {
+      const box = document.getElementById("availableChips");
+      box.innerHTML = "";
+      const used = new Set(state.text.concat(state.vision));
+      if (!state.available.length) {
+        box.textContent = "暂无。请到 WebUI「模型管理」添加并保存后端模型后点刷新。";
+        box.className = "muted";
+        return;
+      }
+      box.className = "chips";
+      state.available.forEach((m) => {
+        const span = document.createElement("span");
+        span.className = "chip" + (used.has(m) ? "" : " unused");
+        span.textContent = m;
+        box.appendChild(span);
+      });
+    }
+
+    function renderAll() {
+      renderList("textList", "text");
+      renderList("visionList", "vision");
+      fillSelect("textPick", state.text);
+      fillSelect("visionPick", state.vision);
+      fillBackendSelects();
+      renderChips();
+    }
+
+    function applyPayload(d) {
+      state.text = Array.isArray(d.text) ? d.text.slice() : [];
+      state.vision = Array.isArray(d.vision) ? d.vision.slice() : [];
+      state.available = Array.isArray(d.available) ? d.available.slice() : [];
+    }
+
+    function qualify(backend, model) {
+      const b = (backend || "").trim();
+      let m = (model || "").trim();
+      if (!m) return "";
+      if (!b) return m;
+      // 已是已知平台前缀则保留
+      for (let i = 0; i < state.backends.length; i++) {
+        const p = state.backends[i] + "/";
+        if (m.startsWith(p)) return m;
+      }
+      return b + "/" + m;
+    }
+
+    async function loadBackends() {
+      try {
+        const data = await api("/backends");
+        const backends = (((data || {}).data || {}).backends) || [];
+        state.backends = backends
+          .filter((b) => b && b.enable !== false && b.name)
+          .map((b) => b.name);
+        const seen = new Set(state.available);
+        backends.forEach((b) => {
+          if (!b || b.enable === false || !b.name) return;
+          (b.models || []).forEach((m) => {
+            const bare = typeof m === "string" ? m : (m && (m.id || m.name));
+            if (!bare) return;
+            const id = qualify(b.name, bare);
+            if (id && !seen.has(id)) {
+              seen.add(id);
+              state.available.push(id);
+            }
+          });
+        });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    async function reload() {
+      if (dirty && !confirm("有未保存的修改，刷新将丢失。继续？")) return;
+      const data = await api("/priority");
+      const d = data.data || data;
+      applyPayload(d);
+      await loadBackends();
+      dirty = false;
+      renderAll();
+      const added = Array.isArray(d.added) ? d.added : [];
+      if (added.length) {
+        showOk("已自动并入模型管理中的新模型：" + added.join("、") + "。如需改序请调整后点保存。");
+      } else {
+        showOk("已加载。可选模型 " + state.available.length + " 个；文本 " + state.text.length + " / 识图 " + state.vision.length);
+      }
+    }
+
+    async function save() {
+      const data = await api("/priority", {
+        method: "PUT",
+        body: JSON.stringify({ text: state.text, vision: state.vision }),
+      });
+      const d = data.data || data;
+      applyPayload(d);
+      await loadBackends();
+      dirty = false;
+      renderAll();
+      showOk("已保存并绑定服务商。默认文本模型：" + (state.text[0] || "（空）"));
+    }
+
+    function addTo(key, value, { persist } = {}) {
+      const v = (value || "").trim();
+      if (!v) return Promise.resolve(false);
+      if (state[key].includes(v)) {
+        showOk("已在列表中：" + v);
+        return Promise.resolve(false);
+      }
+      state[key].push(v);
+      if (!state.available.includes(v)) state.available.push(v);
+      dirty = true;
+      renderAll();
+      if (persist) return save().then(() => true);
+      return Promise.resolve(true);
+    }
+
+    async function manualAdd(key, backendSelId, inputId) {
+      const backend = document.getElementById(backendSelId).value;
+      const raw = document.getElementById(inputId).value;
+      if (!backend) {
+        showError("请先选择服务商（平台）");
+        return;
+      }
+      if (!raw.trim()) {
+        showError("请输入上游模型名");
+        return;
+      }
+      const v = qualify(backend, raw);
+      document.getElementById(inputId).value = "";
+      await addTo(key, v, { persist: true });
+    }
+
+    document.getElementById("textAdd").onclick = () => {
+      addTo("text", document.getElementById("textPick").value);
+    };
+    document.getElementById("visionAdd").onclick = () => {
+      addTo("vision", document.getElementById("visionPick").value);
+    };
+    document.getElementById("textManualAdd").onclick = () => {
+      manualAdd("text", "textBackend", "textManual").catch(showError);
+    };
+    document.getElementById("visionManualAdd").onclick = () => {
+      manualAdd("vision", "visionBackend", "visionManual").catch(showError);
+    };
+    document.getElementById("reloadBtn").onclick = () => reload().catch(showError);
+    document.getElementById("saveBtn").onclick = () => save().catch(showError);
+    reload().catch(showError);
+  </script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>长期设定</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #111; --muted: #666; --line: #ddd; --bg: #fff; --accent: #0b57d0; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #eee; --muted: #aaa; --line: #333; --bg: #111; --accent: #8ab4f8; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+    header { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+    h1 { font-size: 18px; margin: 0; font-weight: 600; }
+    .muted { color: var(--muted); }
+    main { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 57px); }
+    nav { border-right: 1px solid var(--line); padding: 12px; }
+    article { padding: 20px; max-width: 760px; }
+    button, input, textarea, select { font: inherit; }
+    button { background: var(--accent); color: #fff; border: 0; padding: 6px 12px; cursor: pointer; }
+    button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+    input, textarea, select { width: 100%; padding: 8px; border: 1px solid var(--line); background: transparent; color: inherit; }
+    textarea { min-height: 72px; }
+    .row { display: flex; gap: 8px; margin: 8px 0; }
+    .fact { border: 1px solid var(--line); padding: 12px; margin: 10px 0; }
+    .item { display: block; width: 100%; text-align: left; padding: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+    .item.active { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+    #err { color: #c00; margin: 8px 20px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>本群长期设定</h1>
+    <span class="muted">按「角色 + 群」隔离。告白/交往等会在对话后自动记入。列表约 4 秒刷新。</span>
+    <button type="button" class="ghost" id="reloadBtn">刷新列表</button>
+  </header>
+  <p id="err"></p>
+  <main>
+    <nav>
+      <div class="row">
+        <select id="newChar">
+          <option value="anon">千早爱音</option>
+          <option value="soyo">长崎素世</option>
+        </select>
+      </div>
+      <div class="row">
+        <input id="newId" placeholder="群号，例如 1035893116" />
+      </div>
+      <div class="row">
+        <button type="button" id="addBtn">打开 / 新建</button>
+      </div>
+      <div id="list"></div>
+    </nav>
+    <article id="editor" hidden>
+      <p class="muted" id="meta"></p>
+      <div id="facts"></div>
+      <div class="fact">
+        <div class="row"><input id="newKey" placeholder="键，例如 relationship" /></div>
+        <div class="row"><textarea id="newText" placeholder="内容要写清楚结果，例如：已经向长崎素世告白，对方接受了，目前在交往。"></textarea></div>
+        <div class="row">
+          <button type="button" id="saveBtn">保存这条</button>
+          <button type="button" class="ghost" id="clearBtn">清空本群</button>
+        </div>
+      </div>
+    </article>
+  </main>
+  <script>
+    const token = localStorage.getItem("token") || "";
+    const API_BASE = location.pathname.includes("/backend-api/api/world-state")
+      ? location.pathname.replace(/\/ui\/?$/, "")
+      : "/qqbot/backend-api/api/world-state";
+    const CHAR_LABEL = { anon: "爱音", soyo: "素世" };
+    const err = document.getElementById("err");
+    const listEl = document.getElementById("list");
+    const editor = document.getElementById("editor");
+    const factsEl = document.getElementById("facts");
+    const meta = document.getElementById("meta");
+    let current = "";
+
+    function scopeOf(g) {
+      if (g.scope) return g.scope;
+      const c = g.character || "anon";
+      return c + "/" + g.group_id;
+    }
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+      if (token) headers.Authorization = "Bearer " + token;
+      const res = await fetch(API_BASE + path.replace(/^\./, ""), Object.assign({}, opts, { headers }));
+      if (res.status === 401) throw new Error("请先打开 Kirara WebUI 登录，再刷新本页。");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    }
+
+    function showError(e) { err.textContent = e.message || String(e); }
+
+    async function refreshList() {
+      const data = await api("./groups");
+      listEl.innerHTML = "";
+      (data.groups || []).forEach((g) => {
+        const scope = scopeOf(g);
+        const b = document.createElement("button");
+        b.className = "item" + (scope === current ? " active" : "");
+        b.type = "button";
+        const label = CHAR_LABEL[g.character] || g.character || "anon";
+        b.textContent = "[" + label + "] " + (g.group_name ? g.group_name + " · " : "") + g.group_id + "（" + g.fact_count + "）";
+        b.onclick = () => openGroup(scope);
+        listEl.appendChild(b);
+      });
+    }
+
+    async function openGroup(scope) {
+      current = scope;
+      const doc = await api("./groups/" + encodeURIComponent(scope).replace(/%2F/gi, "/"));
+      editor.hidden = false;
+      const label = CHAR_LABEL[doc.character] || doc.character || "";
+      meta.textContent = "[" + label + "] " + (doc.group_name || "未命名群") + " · " + scope + (doc.updated_at ? " · 更新 " + doc.updated_at : "");
+      factsEl.innerHTML = "";
+      (doc.facts || []).forEach((f) => {
+        const box = document.createElement("div");
+        box.className = "fact";
+        box.innerHTML = "<strong>" + f.key + "</strong>"
+          + (f.source ? "<span class=\"muted\"> · " + f.source + "</span>" : "")
+          + (f.updated_at ? "<span class=\"muted\"> · " + f.updated_at + "</span>" : "")
+          + "<p>" + (f.text || "") + "</p>";
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "ghost";
+        del.textContent = "删除";
+        del.onclick = async () => {
+          await api("./groups/" + scope + "/facts/" + encodeURIComponent(f.key), { method: "DELETE" });
+          openGroup(scope); refreshList();
+        };
+        box.appendChild(del);
+        factsEl.appendChild(box);
+      });
+      refreshList();
+    }
+
+    document.getElementById("addBtn").onclick = () => {
+      const id = document.getElementById("newId").value.trim();
+      const ch = document.getElementById("newChar").value;
+      if (id) openGroup(ch + "/" + id);
+    };
+    document.getElementById("saveBtn").onclick = async () => {
+      if (!current) return;
+      const key = document.getElementById("newKey").value.trim();
+      const text = document.getElementById("newText").value.trim();
+      await api("./groups/" + current + "/facts/" + encodeURIComponent(key), {
+        method: "PUT",
+        body: JSON.stringify({ text }),
+      });
+      document.getElementById("newText").value = "";
+      openGroup(current); refreshList();
+    };
+    document.getElementById("clearBtn").onclick = async () => {
+      if (!current || !confirm("清空这个角色在本群的长期设定？")) return;
+      await api("./groups/" + current, { method: "DELETE" });
+      openGroup(current); refreshList();
+    };
+
+    refreshList().catch(showError);
+    document.getElementById("reloadBtn").onclick = () => {
+      const run = current ? openGroup(current).then(refreshList) : refreshList();
+      run.catch(showError);
+    };
+    setInterval(() => {
+      refreshList().catch(() => {});
+      if (current) openGroup(current).catch(() => {});
+    }, 4000);
+  </script>
+</body>
+</html>

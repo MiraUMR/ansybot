@@ -1,0 +1,29 @@
+# 模型优先级（越靠前越优先；额度/限流失败时按此顺序自动切换）
+# 格式：平台/模型名；百炼厂商前缀保留在模型段内，如 阿里/ZHIPU/GLM-5.3-Flash
+#
+# 本文件 text/vision 非空时优先生效；
+# 若都留空，则使用 config.yaml → llms.priority；
+# 再空则回退到模型管理后端的 models 列表顺序。
+
+max_failover: 8
+vision_fallback_to_text: true
+
+# 文本回复优先级
+text:
+  - 阿里/ZHIPU/GLM-5.3-Flash
+  - 阿里/deepseek-v3.2
+  - amd/DeepSeek-V4-Flash
+  - 智谱/glm-4.7-flash
+  - 阿里/deepseek-v4-flash-0731
+  - 阿里/qwen-plus
+  - 阿里/qwen-flash
+  - 阿里/qwen-turbo
+  - 阿里/qwen-flash-character
+
+# 识图优先级（仅有图时使用）
+vision:
+  - 阿里/qwen3-vl-plus
+  - 阿里/qwen3-vl-flash
+  - 阿里/qwen-vl-plus
+  - 阿里/deepseek-v4-flash-0731
+  - amd/DeepSeek-V4-Flash-Vision-Exp
