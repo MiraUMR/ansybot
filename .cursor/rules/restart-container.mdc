@@ -1,0 +1,11 @@
+---
+description: After bot or plugin changes, restart the kirara container by default
+alwaysApply: true
+---
+
+After changing runtime code, persona YAML, workflows, or other files the live bot uses, deploy them to the server and restart the container without waiting to be asked.
+
+- Server: `root@38.22.235.136`, project `/opt/kirara-ai`
+- Upload changed files, then `docker compose up -d --force-recreate --no-deps kirara-agent` in `/opt/kirara-ai`
+- Confirm `kirara-qq-bot` is up and Anon `3845655536` / Soyo `2246246527` connected
+- Do not restart only for local-only notes, or if the user explicitly says not to restart

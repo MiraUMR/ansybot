@@ -17,9 +17,10 @@ default_text = [
     "qwen-turbo",
 ]
 default_vision = [
-    "qwen3-vl-plus",
-    "qwen3-vl-flash",
-    "qwen-vl-plus",
+    "qwen3.8-flash",
+    "qwen3.6-flash",
+    "qwen3.7-plus",
+    "qwen3.8-max",
 ]
 
 # Sync from llm_pools.yaml if present

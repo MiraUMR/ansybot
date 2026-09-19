@@ -89,22 +89,34 @@ categories:
   - 冰淇淋
   - 吃饭
   - 好吃
+  - 奶茶
+  - 蛋糕
+  - 咖啡
+  - 可颂
+  - 布丁
+  - 马卡龙
+  - 泡芙
+  - 大福
   aliases:
   - 零食
   - 甜的
   - 酸的
   - 午饭
   - 晚饭
-  - 蛋糕
-  - 布丁
+  - 团子
+  - 铜锣烧
+  - 舒芙蕾
+  - 提拉米苏
+  - 手摇
+  - 珍珠
   reply_stance: engage
   mode_hints:
   - direct
   - peer
   - env
   sample_lines:
-  - 水果三明治！现在就要。
-  - 梅干什么的……我先逃了。
+  - 这个看着就想吃。
+  - 酸的就算了。
   forbid_pivot: false
 - id: peer_bond
   display_name: 同伴与亲密
@@ -158,6 +170,5 @@ categories:
   - direct
   sample_lines:
   - ……好困。
-  - 这天气，头发全毁了啦。
   - 哈？大半夜的……
   forbid_pivot: false

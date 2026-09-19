@@ -24,12 +24,14 @@ from kirara_ai.workflow.core.block import Block, Input, Output, ParamMeta
 from kirara_ai.workflow.core.execution.executor import WorkflowExecutor
 
 _VISION_CONTEXT_HINT = (
-    "\n\n（对方发了图片。请先看清图里实际内容，再结合上方「近期聊天」回应；"
+    "\n\n（对方发了图片。先看清这一张里实际有什么，再按这一张反应。"
+    "近期聊天只用来避免叫错人、接上刚说过的话，不要把上一轮看图的句子、梗、反应模板套过来。"
     "不要用括号写动作旁白。"
     "若图里的人明显像你本人（或很像你的二创/截图/表情包）：直接按「看到自己」反应即可，"
-    "不要把图解释成群友拍的、P 的、偷存的，也不要点名群友（如米拉）来编因果关系；"
+    "不要把图解释成别人拍的、P 的、偷存的，也不要点名无关的人来编因果关系；"
     "除非对方原文明确提到某人与这张图有关。"
-    "若图是同伴或其他人，也不要硬扯无关群友。）"
+    "不要为了找同伴而说「截图发给她 / 拉她看」；对方没点同伴就别拐。"
+    "若图是同伴或其他人，也不要硬扯无关的人。）"
 )
 
 _POOLS_LOGGER = get_logger("LLMPools")
@@ -46,6 +48,7 @@ _QUOTA_MARKERS = (
     "429",
     "401",
     "402",
+    "404",
     "arrearage",
     "balance",
     "timeout",
@@ -58,9 +61,16 @@ _QUOTA_MARKERS = (
     "capacity",
     "no available",
     "model not found",
+    "model_not_found",
+    "model not exist",
     "does not exist",
+    "not exist",
+    "unpurchased",
     "access denied",
+    "accessdenied",
     "forbidden",
+    "unexpected item type",
+    "does not support image",
 )
 
 _VISION_NAME_MARKERS = (
@@ -368,6 +378,14 @@ def _extract_group_name(user_msg: IMMessage) -> str:
             return ""
     return ""
 
+
+def _safe_public_name(name: str) -> str:
+    s = (name or "").strip()
+    if not s or (s.isdigit() and len(s) >= 5):
+        return "眼前的人"
+    return s
+
+
 class ChatMessageConstructor(Block):
     name = "chat_message_constructor"
     inputs = {
@@ -383,9 +401,9 @@ class ChatMessageConstructor(Block):
             "dialogue_target",
             "对话对象",
             str,
-            "同伴或群友描述，写入 {dialogue_target}",
+            "同伴或眼前的人，写入 {dialogue_target}",
             nullable=True,
-            default="群友",
+            default="眼前的人",
         ),
         "user_prompt_text": Input(
             "user_prompt_text",
@@ -452,14 +470,20 @@ class ChatMessageConstructor(Block):
         executor = self.container.resolve(WorkflowExecutor)
 
         scene = (current_scene or "").strip() or "（暂无额外环境音。）"
+        speaker = _safe_public_name(user_msg.sender.display_name or "")
+        target = re.sub(
+            r"[（(][^）)]*\d{5,}[^）)]*[）)]", "", (dialogue_target or "").strip()
+        ).strip(" ，,")
+        if not target or (target.isdigit() and len(target) >= 5):
+            target = "眼前的人"
         replacements = {
             "{current_date_time}": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "{user_msg}": user_msg.content,
-            "{user_name}": user_msg.sender.display_name,
-            "{user_id}": user_msg.sender.user_id,
-            "{group_id}": user_msg.sender.group_id or "",
-            "{group_name}": _extract_group_name(user_msg) or (user_msg.sender.group_id or "私聊"),
-            "{dialogue_target}": (dialogue_target or "群友").strip() or "群友",
+            "{user_name}": speaker,
+            "{user_id}": "",
+            "{group_id}": "",
+            "{group_name}": _extract_group_name(user_msg) or "当下",
+            "{dialogue_target}": target or "眼前的人",
             "{current_scene}": scene,
         }
 
@@ -481,7 +505,7 @@ class ChatMessageConstructor(Block):
             user_prompt = self.substitute_variables(user_prompt_format, executor)
 
         images = list(user_msg.images or [])
-        # 环境旁白回合不带原图进对话（避免把群友身份带回来）；仍允许 @ 直接对话带图
+        # 环境旁白回合不带原图进对话（避免把外人身份带回来）；仍允许被点到时带图
         if override.startswith(("【当前环境】", "【系统】", "【当前场面】")):
             images = []
 
@@ -493,7 +517,7 @@ class ChatMessageConstructor(Block):
                     desc = (image.get_description() or "").strip()
                 except Exception:
                     desc = ""
-                if desc:
+                if desc and not _looks_like_voice_caption(desc):
                     desc_bits.append(desc)
             if desc_bits:
                 prompt_text = f"{prompt_text}\n[已识别图片内容: {'；'.join(desc_bits)}]"
@@ -512,6 +536,39 @@ class ChatMessageConstructor(Block):
             
         llm_msg.append(LLMChatMessage(role="user", content=content))
         return {"llm_msg": llm_msg}
+
+
+_VISION_VOICE_LEAK_RE = re.compile(
+    r"发给|截图|soyorin|小爱音|走不动|某人|拉她|给她看",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_voice_caption(text: str) -> bool:
+    raw = re.sub(r"\s+", " ", (text or "").strip())
+    if not raw:
+        return False
+    if _VISION_VOICE_LEAK_RE.search(raw):
+        return True
+    return len(raw) >= 40
+
+
+def _vision_caption_from_reply(reply: str) -> str:
+    """记忆里只留短物象，不把整段角色回复当图片说明。"""
+    text = re.sub(r"\s+", " ", (reply or "").strip())
+    if not text:
+        return "已看过图"
+    head = re.split(r"[。？?\n]", text, maxsplit=1)[0].strip("，,。！!?—-… ")
+    if len(head) < 8:
+        bits = [p.strip() for p in re.split(r"[。！？!?\n]", text) if p.strip()]
+        head = "。".join(bits[:2]).strip("，,。！!?—-… ")
+    if not head or _looks_like_voice_caption(head):
+        cleaned = _VISION_VOICE_LEAK_RE.sub(" ", head or text)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip("，,。！!?—-… ")
+        if 4 <= len(cleaned) <= 24:
+            return cleaned
+        return "已看过图"
+    return head[:36]
 
 
 def _assistant_plain_text(resp: LLMChatResponse) -> str:
@@ -670,9 +727,7 @@ class ChatCompletion(Block):
                         media_ids.append(part.media_id)
         if not media_ids:
             return
-        summary = _assistant_plain_text(resp) or "用户发送了一张图片"
-        if len(summary) > 220:
-            summary = summary[:220] + "…"
+        summary = _vision_caption_from_reply(_assistant_plain_text(resp))
         try:
             media_manager = self.container.resolve(MediaManager)
         except Exception as e:
@@ -684,9 +739,13 @@ class ChatCompletion(Block):
                 if not media:
                     self.logger.warning(f"vision desc skip, media missing: {media_id}")
                     continue
-                # 保留已有更具体描述；空或过短则用本轮理解覆盖
                 old = (media.description or "").strip()
-                if old and len(old) >= 40 and old != "用户发送了一张图片":
+                if (
+                    old
+                    and old not in ("用户发送了一张图片", "已看过图")
+                    and not _looks_like_voice_caption(old)
+                    and len(old) >= 4
+                ):
                     continue
                 media.description = summary
                 self.logger.info(f"vision desc saved media={media_id}: {summary[:80]}")

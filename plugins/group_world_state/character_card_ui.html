@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>角色卡 · Config V2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+:root {
+  --c1: #FFF2B3; --c2: #ffcdcc; --c3: #ffb3c7; --c4: #cc9f92;
+  --bg: linear-gradient(160deg, #FFF2B3 0%, #ffcdcc 46%, #ffb3c7 100%);
+  --ink: #4a342c; --muted: #7a5c52; --accent: #cc9f92;
+  --card: rgba(255,255,255,.88); --line: rgba(74,52,44,.12);
+  --shadow: 0 8px 28px rgba(74,52,44,.08); --radius: 16px;
+}
+body.theme-anon {
+  --c1: #ffdce4; --c2: #f0e9de; --c3: #f2bfad; --c4: #f4e3ca;
+  --bg: linear-gradient(160deg, #ffdce4 0%, #f4e3ca 42%, #f0e9de 100%);
+  --ink: #5a3d3a; --muted: #8a6a62; --accent: #f2bfad;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Noto Sans SC', sans-serif; background: var(--bg);
+  min-height: 100vh; color: var(--ink); padding: 16px 16px 28px;
+}
+.top-bar {
+  position: sticky; top: 10px; z-index: 20;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 auto 14px; max-width: 1280px; padding: 12px 18px;
+  background: var(--card); backdrop-filter: blur(10px);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.top-bar h1 { font-size: 16px; font-weight: 700; color: var(--ink); }
+.char-switch { display: flex; gap: 4px; background: rgba(74,52,44,.06); border-radius: 12px; padding: 3px; }
+.char-btn {
+  padding: 8px 16px; border: none; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;
+  background: transparent; color: var(--muted);
+}
+.char-btn.active { background: white; color: var(--ink); box-shadow: 0 2px 8px rgba(74,52,44,.1); }
+.nav-links { display: flex; gap: 8px; align-items: center; }
+.nav-links a, .btn-main, .btn-small, .btn-secondary, .btn {
+  text-decoration: none; color: var(--ink); font-size: 12px; font-weight: 600;
+  padding: 8px 12px; border-radius: 10px; background: white; border: 1px solid var(--line); cursor: pointer;
+}
+.btn-main { background: var(--c3); border-color: transparent; }
+.btn-small { padding: 8px 12px; background: var(--c4); border: none; color: var(--ink); }
+.app {
+  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px;
+  max-width: 1280px; margin: 0 auto; align-items: start;
+}
+.side-nav {
+  position: sticky; top: 86px; max-height: calc(100vh - 104px); overflow: auto;
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 10px;
+}
+.nav-group { margin-bottom: 10px; }
+.nav-group-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .4px; color: var(--muted);
+  padding: 6px 8px 4px;
+}
+.nav-link, .nav-sub {
+  display: block; width: 100%; text-align: left; border: none; background: transparent;
+  color: var(--ink); font-size: 13px; font-weight: 600; padding: 7px 10px; border-radius: 8px; cursor: pointer;
+}
+.nav-sub { font-size: 12px; font-weight: 500; color: var(--muted); padding-left: 18px; }
+.nav-link:hover, .nav-sub:hover, .nav-link.active, .nav-sub.active { background: var(--c1); color: var(--ink); }
+.workspace { min-width: 0; }
+.card {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 12px;
+  scroll-margin-top: 92px;
+}
+.sec-head, .sub-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  border: none; cursor: pointer; text-align: left; color: var(--ink); font-weight: 700;
+}
+.sec-head { padding: 13px 16px; font-size: 14px; background: var(--c2); }
+.sec:nth-child(3n+1) > .sec-head { background: var(--c1); }
+.sec:nth-child(3n+2) > .sec-head { background: var(--c3); }
+.sec:nth-child(3n) > .sec-head { background: var(--c4); }
+.sec-body, .sub-body { display: none; padding: 14px 16px 16px; }
+.sec.open > .sec-body, .sub.open > .sub-body { display: block; }
+.sub { border-top: 1px solid var(--line); }
+.sub-head { padding: 11px 0; font-size: 13px; background: transparent; }
+.avatar-section { text-align: center; padding: 8px 8px 4px; }
+.avatar-frame {
+  width: 108px; height: 108px; margin: 0 auto 12px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--c1); border: 4px solid var(--c3);
+  font-size: 42px; font-weight: 700; letter-spacing: 0; text-transform: lowercase;
+}
+.char-name { font-size: 22px; font-weight: 700; }
+.char-title { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.stat-bar { margin-bottom: 10px; text-align: left; }
+.stat-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.stat-track { height: 6px; background: rgba(74,52,44,.08); border-radius: 3px; overflow: hidden; }
+.stat-fill { height: 100%; border-radius: 3px; background: var(--c3); }
+.field-group { margin-bottom: 12px; }
+.field-label { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+input[type="text"], input[type="number"], input[type="range"], textarea, select {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px;
+  font-size: 13px; font-family: inherit; background: rgba(255,255,255,.8); outline: none; color: var(--ink);
+}
+input:focus, textarea:focus, select:focus { border-color: var(--c4); box-shadow: 0 0 0 3px rgba(204,159,146,.25); }
+textarea { resize: vertical; min-height: 58px; }
+.list-container, .tag-box {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px;
+  border: 1px dashed var(--line); border-radius: 10px; min-height: 40px;
+}
+.tag-item {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 500; background: var(--c2); color: var(--ink); max-width: 100%;
+}
+.tag-remove { cursor: pointer; opacity: .6; font-weight: 700; }
+.add-input-wrapper { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.add-input-wrapper input, .add-input-wrapper select { flex: 1; min-width: 80px; }
+.relation-item {
+  padding: 10px; border-radius: 10px; background: rgba(255,255,255,.55); margin-bottom: 8px;
+  border-left: 3px solid var(--c4); position: relative;
+}
+.relation-name { font-size: 13px; font-weight: 700; }
+.relation-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cat-row {
+  display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px;
+  background: rgba(255,255,255,.6); margin-bottom: 6px; cursor: pointer; border: 1px solid transparent;
+}
+.cat-row.active { border-color: var(--c4); background: var(--c1); }
+.flash { font-size: 13px; font-weight: 700; margin: 4px 0 10px; }
+.err { color: #a33; }
+.prompt-box {
+  white-space: pre-wrap; font-size: 12px; line-height: 1.55; background: rgba(255,255,255,.7);
+  border-radius: 10px; padding: 10px; min-height: 72px; border: 1px solid var(--line);
+}
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  .side-nav { position: static; max-height: none; }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body class="theme-soyo">
+<div class="top-bar" id="topbar">
+  <h1>角色卡</h1>
+  <div class="char-switch">
+    <button type="button" class="char-btn active" id="btn-soyo" onclick="loadChar('soyo')">soyo 长崎素世</button>
+    <button type="button" class="char-btn" id="btn-anon" onclick="loadChar('anon')">anon 千早爱音</button>
+  </div>
+  <div class="nav-links">
+    <a href="#" id="homeBtn">返回主页</a>
+    <a href="#" id="hubBtn">角色管理</a>
+    <button class="btn-main" type="button" onclick="saveConfig()">保存角色卡</button>
+  </div>
+</div>
+
+<div class="app">
+  <aside class="side-nav" id="side-nav">
+    <div class="nav-group">
+      <div class="nav-group-title">角色</div>
+      <button class="nav-link" data-jump="sec-overview">概览</button>
+      <button class="nav-link" data-jump="sec-identity">基础信息</button>
+      <button class="nav-link" data-jump="sec-psych">心理特质</button>
+      <button class="nav-link" data-jump="sec-behavior">行为规则</button>
+      <button class="nav-sub" data-jump="sub-speech">说话风格</button>
+      <button class="nav-sub" data-jump="sub-action">动作描写</button>
+      <button class="nav-sub" data-jump="sub-logic">互动逻辑</button>
+      <button class="nav-link" data-jump="sec-family">家庭与背景</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">条件规则</div>
+      <button class="nav-link" data-jump="sec-companion">同伴互聊</button>
+      <button class="nav-link" data-jump="sec-trigger">被@响应</button>
+      <button class="nav-link" data-jump="sec-scene">场景氛围</button>
+      <button class="nav-link" data-jump="sec-story">故事模式</button>
+      <button class="nav-link" data-jump="sec-phone">手机模式</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">关系与记忆</div>
+      <button class="nav-link" data-jump="sec-peers">同伴关系</button>
+      <button class="nav-link" data-jump="sec-memory">记忆锚点</button>
+      <button class="nav-link" data-jump="sec-axioms">核心公理</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">语义分类</div>
+      <button class="nav-link" data-jump="sec-classify">分类与测试</button>
+      <div id="classify-nav"></div>
+    </div>
+  </aside>
+
+  <div class="workspace">
+    <div class="flash" id="flash"></div>
+
+    <section class="card sec open" id="sec-overview">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">概览 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="avatar-section">
+          <div class="avatar-frame" id="avatar-emoji">s</div>
+          <div class="char-name" id="char-name">长崎素世</div>
+          <div class="char-title" id="char-title">MyGO!!!!! · 贝斯手</div>
+          <div id="stat-bars" style="margin-top:14px"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-identity">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">基础信息 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="grid-2">
+          <div class="field-group"><div class="field-label">全名</div><input type="text" id="name_full"></div>
+          <div class="field-group"><div class="field-label">别名（逗号分隔）</div><input type="text" id="name_aliases_str"></div>
+          <div class="field-group"><div class="field-label">年龄</div><input type="number" id="age"></div>
+          <div class="field-group"><div class="field-label">生日</div><input type="text" id="birthday"></div>
+          <div class="field-group"><div class="field-label">性别</div>
+            <select id="gender"><option value="female">female</option><option value="male">male</option><option value="other">other</option></select>
+          </div>
+          <div class="field-group"><div class="field-label">乐队职位</div><input type="text" id="band_role"></div>
+          <div class="field-group"><div class="field-label">职业</div><input type="text" id="occupation"></div>
+          <div class="field-group"><div class="field-label">乐器</div><input type="text" id="instrument"></div>
+        </div>
+        <div class="field-group"><div class="field-label">外形</div><input type="text" id="appearance"></div>
+        <div class="field-group"><div class="field-label">ID</div><input type="text" id="meta_id" readonly></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-psych">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">心理特质 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-label">核心性格</div>
+        <div id="traits-list" class="list-container"></div>
+        <div class="add-input-wrapper">
+          <input type="text" id="new-trait" placeholder="标签">
+          <input type="text" id="new-trait-desc" placeholder="一句事实">
+          <select id="new-trait-pri"><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+          <button class="btn-small" type="button" onclick="addTrait()">添加</button>
+        </div>
+        <div class="field-label" style="margin-top:12px">恐惧</div>
+        <div id="fears-list" class="list-container"></div>
+        <div class="add-input-wrapper"><input type="text" id="new-fear"><button class="btn-small" type="button" onclick="addFear()">添加</button></div>
+        <div class="field-label" style="margin-top:12px">欲望</div>
+        <div id="desires-list" class="list-container"></div>
+        <div class="add-input-wrapper"><input type="text" id="new-desire"><button class="btn-small" type="button" onclick="addDesire()">添加</button></div>
+        <div class="field-group" style="margin-top:12px"><div class="field-label">防御机制</div><textarea id="defense" rows="2"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-behavior">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">行为规则 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="sub open" id="sub-speech">
+          <button type="button" class="sub-head" onclick="toggleSec(this)">说话风格 <span>▾</span></button>
+          <div class="sub-body">
+            <div class="field-label">禁止说法</div>
+            <div id="forbid-list" class="list-container"></div>
+            <div class="add-input-wrapper"><input type="text" id="new-forbid"><button class="btn-small" type="button" onclick="addForbid()">添加</button></div>
+            <div class="field-group"><div class="field-label">句长风格</div>
+              <select id="sentence_style">
+                <option value="concise">简洁 concise</option>
+                <option value="short_fragmented">碎句 short_fragmented</option>
+                <option value="medium">中等 medium</option>
+              </select>
+            </div>
+            <div class="field-group"><div class="field-label">开场约束</div><textarea id="opening_constraints" rows="2"></textarea></div>
+          </div>
+        </div>
+        <div class="sub" id="sub-action">
+          <button type="button" class="sub-head" onclick="toggleSec(this)">动作描写 <span>▾</span></button>
+          <div class="sub-body">
+            <div class="grid-2">
+              <div class="field-group"><div class="field-label">日常频率</div><input type="text" id="act_daily"></div>
+              <div class="field-group"><div class="field-label">故事模式</div><input type="text" id="act_story"></div>
+            </div>
+            <div class="field-label">视觉焦点</div>
+            <div id="visual-list" class="list-container"></div>
+            <div class="add-input-wrapper"><input type="text" id="new-visual"><button class="btn-small" type="button" onclick="addVisual()">添加</button></div>
+          </div>
+        </div>
+        <div class="sub" id="sub-logic">
+          <button type="button" class="sub-head" onclick="toggleSec(this)">互动逻辑 <span>▾</span></button>
+          <div class="sub-body">
+            <div class="field-group"><div class="field-label">触发 → 响应（一行一条）</div><textarea id="interaction_logic" rows="5"></textarea></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-family">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">家庭与背景 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">家庭（关系；阶层；事件，用；分隔）</div><textarea id="family_desc" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">话题处理</div><textarea id="family_handling" rows="2"></textarea></div>
+        <div class="field-group"><div class="field-label">对外形象</div><input type="text" id="public_image"></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-companion">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">同伴互聊规则 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">默认态度</div><textarea id="cm_attitude" rows="2"></textarea></div>
+        <div class="field-label">行为触发器</div>
+        <div id="cm-triggers" class="list-container"></div>
+        <div class="add-input-wrapper"><input type="text" id="cm-new-trigger" placeholder="她收口→停"><button class="btn-small" type="button" onclick="addModeTrigger()">添加</button></div>
+        <div class="field-group"><div class="field-label">收束规则</div><textarea id="cm_close" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">共鸣规则</div><textarea id="cm_resonate" rows="2"></textarea></div>
+        <div class="field-group"><div class="field-label">正确示例</div><textarea id="cm_good" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">错误示例</div><textarea id="cm_bad" rows="3"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-trigger">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">被@响应规则 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">禁止</div><textarea id="tm_forbid" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">回应优先级</div><textarea id="tm_framework" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">称呼</div><textarea id="tm_address" rows="2"></textarea></div>
+        <div class="field-group"><div class="field-label">正确示例</div><textarea id="tm_good" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">错误示例</div><textarea id="tm_bad" rows="3"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-scene">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">场景氛围 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">读取规则（一行一条）</div><textarea id="sm_read" rows="4"></textarea></div>
+        <div class="field-group"><div class="field-label">空闲反应</div><textarea id="sm_idle" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">用法</div><textarea id="sm_usage" rows="2"></textarea></div>
+        <div class="field-group"><div class="field-label">允许</div><textarea id="sm_allow" rows="2"></textarea></div>
+        <div class="field-group"><div class="field-label">禁止</div><textarea id="sm_forbid" rows="2"></textarea></div>
+        <div class="field-group"><div class="field-label">正确示例</div><textarea id="sm_good" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">错误示例</div><textarea id="sm_bad" rows="2"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-story">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">故事模式 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">演绎指令</div><textarea id="stm_directive" rows="4"></textarea></div>
+        <div class="field-group"><div class="field-label">镜头风格</div><textarea id="stm_style" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">互动</div><textarea id="stm_interaction" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">正确示例</div><textarea id="stm_good" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">错误示例</div><textarea id="stm_bad" rows="2"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-phone">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">手机模式 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">格式（高于日常说话）</div><textarea id="pm_format" rows="4"></textarea></div>
+        <div class="field-group"><div class="field-label">行为</div><textarea id="pm_behavior" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">正确示例</div><textarea id="pm_good" rows="3"></textarea></div>
+        <div class="field-group"><div class="field-label">错误示例</div><textarea id="pm_bad" rows="2"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-peers">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">同伴关系 <span>▾</span></button>
+      <div class="sec-body">
+        <div id="peers-list"></div>
+        <div class="add-input-wrapper">
+          <input type="text" id="peer-name" placeholder="target_id">
+          <input type="text" id="peer-type" placeholder="关系类型">
+        </div>
+        <div class="add-input-wrapper">
+          <input type="text" id="peer-dyn" placeholder="动态">
+          <button class="btn-small" type="button" onclick="addPeer()">添加</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-memory">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">记忆锚点 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">长期事实（一行一条）</div><textarea id="mem_facts" rows="4"></textarea></div>
+        <div class="field-group"><div class="field-label">情感触发器</div><textarea id="mem_trigs" rows="3"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-axioms">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">核心公理 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="field-group"><div class="field-label">每行一条，保存时全部注入</div><textarea id="axioms" rows="7"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card sec" id="sec-classify">
+      <button type="button" class="sec-head" onclick="toggleSec(this)">语义分类 <span>▾</span></button>
+      <div class="sec-body">
+        <div class="grid-2">
+          <div>
+            <div class="field-label">匹配灵敏度 <span id="sensitivity-val">45</span></div>
+            <input type="range" id="sensitivity-slider" min="0" max="100" value="45">
+            <div class="add-input-wrapper">
+              <button class="btn-small" type="button" onclick="addCategory()">新增场景</button>
+              <button class="btn-secondary" type="button" onclick="exportYAML()">导出</button>
+            </div>
+            <div id="cat-list" style="margin-top:10px"></div>
+          </div>
+          <div>
+            <div class="field-label">测试一句话</div>
+            <div class="add-input-wrapper">
+              <input type="text" id="test-text" placeholder="输入后回车测试">
+              <button class="btn-small" type="button" onclick="runTest()">测试</button>
+            </div>
+            <div id="test-result" style="margin:8px 0;font-size:12px"></div>
+            <div class="prompt-box" id="prompt-preview">命中后显示注入片段</div>
+          </div>
+        </div>
+        <div id="cat-editor" style="margin-top:12px"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+let state = {};
+let categories = [];
+let replyStyles = [];
+let activeCatId = "";
+let sensitivity = 45;
+let sensTimer = 0;
+const THEME = {
+  soyo: { mark: "s", title: "MyGO!!!!! · 贝斯手" },
+  anon: { mark: "a", title: "MyGO!!!!! · 节奏吉他手" }
+};
+
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function charId() { return (state.meta && state.meta.id) || "soyo"; }
+function toggleSec(el) {
+  const box = el.closest(".sec, .sub");
+  if (box) box.classList.toggle("open");
+}
+function openAndJump(id) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.add("open");
+  const parent = el.closest(".sec");
+  if (parent) parent.classList.add("open");
+  document.querySelectorAll(".nav-link, .nav-sub").forEach((b) => b.classList.toggle("active", b.getAttribute("data-jump") === id));
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function token() {
+  const q = new URLSearchParams(location.search).get("auth_token");
+  if (q) { try { localStorage.setItem("token", q); } catch (e) {} return q; }
+  return localStorage.getItem("token") || "";
+}
+function apiBase() {
+  if (location.pathname.indexOf("/backend-api/api/persona") >= 0) {
+    return location.pathname.replace(/\/(ui|card-ui)\/?$/, "");
+  }
+  const prefix = location.pathname.indexOf("/qqbot/") === 0 ? "/qqbot" : "";
+  return prefix + "/backend-api/api/persona";
+}
+function semanticBase() {
+  const prefix = location.pathname.indexOf("/qqbot/") === 0 ? "/qqbot" : "";
+  return prefix + "/backend-api/api/semantic-classify";
+}
+function api(path, opts) {
+  const t = token();
+  const headers = Object.assign({ "Content-Type": "application/json" }, (opts && opts.headers) || {});
+  if (t) headers.Authorization = "Bearer " + t;
+  let url = apiBase() + path;
+  if (t) url += (url.indexOf("?") >= 0 ? "&" : "?") + "auth_token=" + encodeURIComponent(t);
+  return fetch(url, Object.assign({}, opts || {}, { headers }));
+}
+async function sem(method, path, body) {
+  const t = token();
+  const headers = { "Content-Type": "application/json" };
+  if (t) headers.Authorization = "Bearer " + t;
+  let url = semanticBase() + "/" + charId() + path;
+  if (t) url += (url.indexOf("?") >= 0 ? "&" : "?") + "auth_token=" + encodeURIComponent(t);
+  const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+  return data;
+}
+function renderList(containerId, items, removeName) {
+  const box = $(containerId);
+  if (!box) return;
+  box.innerHTML = "";
+  (items || []).forEach((item, index) => {
+    const text = typeof item === "string" ? item : (item.label || item.id || "");
+    const extra = item && item.description ? " — " + item.description : "";
+    const pri = item && item.priority ? " · " + item.priority : "";
+    const div = document.createElement("div");
+    div.className = "tag-item";
+    div.innerHTML = "<span>" + esc(text + extra + pri) + "</span> <span class='tag-remove' data-fn='" + removeName + "' data-i='" + index + "'>×</span>";
+    box.appendChild(div);
+  });
+}
+document.addEventListener("click", (ev) => {
+  const jump = ev.target.closest && ev.target.closest("[data-jump]");
+  if (jump) { openAndJump(jump.getAttribute("data-jump")); return; }
+  const el = ev.target;
+  if (!el.classList || !el.classList.contains("tag-remove")) return;
+  const fn = el.getAttribute("data-fn");
+  const i = Number(el.getAttribute("data-i"));
+  if (fn === "trait") state.psychology.core_traits.splice(i, 1);
+  if (fn === "fear") state.psychology.fears.splice(i, 1);
+  if (fn === "desire") state.psychology.desires.splice(i, 1);
+  if (fn === "forbid") state.behavioral_rules.speech_style.forbidden_patterns.splice(i, 1);
+  if (fn === "peer") state.social_context.peer_relations.splice(i, 1);
+  if (fn === "visual") state.behavioral_rules.action_style.visual_focus.splice(i, 1);
+  if (fn === "cm-trigger") {
+    state.companion_mode = state.companion_mode || {};
+    state.companion_mode.behavior_triggers.splice(i, 1);
+  }
+  paint();
+});
+function addTrait() {
+  const label = $("new-trait").value.trim();
+  if (!label) return;
+  state.psychology.core_traits.push({ id: "t" + Date.now(), label, description: $("new-trait-desc").value.trim(), priority: $("new-trait-pri").value });
+  $("new-trait").value = ""; $("new-trait-desc").value = ""; paint();
+}
+function addFear() {
+  const v = $("new-fear").value.trim(); if (!v) return;
+  state.psychology.fears.push(v); $("new-fear").value = ""; paint();
+}
+function addDesire() {
+  const v = $("new-desire").value.trim(); if (!v) return;
+  state.psychology.desires.push(v); $("new-desire").value = ""; paint();
+}
+function addForbid() {
+  const v = $("new-forbid").value.trim(); if (!v) return;
+  state.behavioral_rules.speech_style = state.behavioral_rules.speech_style || {};
+  state.behavioral_rules.speech_style.forbidden_patterns = state.behavioral_rules.speech_style.forbidden_patterns || [];
+  state.behavioral_rules.speech_style.forbidden_patterns.push(v);
+  $("new-forbid").value = ""; paint();
+}
+function addVisual() {
+  const v = $("new-visual").value.trim(); if (!v) return;
+  state.behavioral_rules.action_style = state.behavioral_rules.action_style || {};
+  state.behavioral_rules.action_style.visual_focus = state.behavioral_rules.action_style.visual_focus || [];
+  state.behavioral_rules.action_style.visual_focus.push(v);
+  $("new-visual").value = ""; paint();
+}
+function addPeer() {
+  const name = $("peer-name").value.trim();
+  const dyn = $("peer-dyn").value.trim();
+  if (!name || !dyn) return;
+  state.social_context.peer_relations.push({ target_id: name, relationship_type: $("peer-type").value.trim(), dynamic_description: dyn });
+  $("peer-name").value = ""; $("peer-type").value = ""; $("peer-dyn").value = ""; paint();
+}
+function linesOf(text) { return String(text || "").split(/\n/).map(s => s.trim()).filter(Boolean); }
+function ensureMode(key) { state[key] = state[key] || {}; return state[key]; }
+function addModeTrigger() {
+  const input = $("cm-new-trigger");
+  const raw = input.value.trim(); if (!raw) return;
+  const parts = raw.split("→");
+  const cm = ensureMode("companion_mode");
+  cm.behavior_triggers = cm.behavior_triggers || [];
+  cm.behavior_triggers.push({ trigger: (parts[0] || "").trim(), action: (parts[1] || "").trim(), note: raw });
+  input.value = ""; paint();
+}
+function formatBad(items) {
+  return (items || []).map(item => {
+    if (typeof item === "string") return item;
+    return (item.text || "") + (item.reason ? " [" + item.reason + "]" : "");
+  }).join("\n");
+}
+function parseBad(text) {
+  return linesOf(text).map(line => {
+    const m = line.match(/^(.*)\s+\[(.+)\]$/);
+    if (m) return { text: m[1].trim(), reason: m[2].trim() };
+    return { text: line, reason: "" };
+  });
+}
+function splitFreq(raw) {
+  const text = String(raw || "");
+  if (text.indexOf("|") < 0) return { daily: text, story: text };
+  const parts = text.split("|");
+  return { daily: parts[0].replace(/Daily[:：]/, "").trim(), story: parts[1].replace(/Story[:：]/, "").trim() };
+}
+function priScore(pri) { return { Critical: 92, High: 78, Medium: 60, Low: 40 }[pri] || 50; }
+function paintTheme(id) {
+  const cid = id || charId();
+  document.body.className = cid === "anon" ? "theme-anon" : "theme-soyo";
+  document.querySelectorAll(".char-btn").forEach((b) => b.classList.remove("active"));
+  const btn = $(cid === "anon" ? "btn-anon" : "btn-soyo");
+  if (btn) btn.classList.add("active");
+  const theme = THEME[cid] || THEME.soyo;
+  const ident = state.identity || {};
+  $("avatar-emoji").textContent = theme.mark;
+  $("char-name").textContent = ident.name_full || (state.meta && state.meta.display_name) || cid;
+  $("char-title").textContent = [ident.occupation, ident.band_role].filter(Boolean).join(" · ") || theme.title;
+  const traits = ((state.psychology || {}).core_traits || []).slice(0, 4);
+  $("stat-bars").innerHTML = traits.map((t) => {
+    const score = priScore(t.priority);
+    return '<div class="stat-bar"><div class="stat-label"><span>' + esc(t.label) + '</span><span>' + esc(t.priority || "") + '</span></div><div class="stat-track"><div class="stat-fill" style="width:' + score + '%"></div></div></div>';
+  }).join("");
+}
+function paint() {
+  state.psychology = state.psychology || { core_traits: [], fears: [], desires: [] };
+  state.social_context = state.social_context || { family_status: {}, peer_relations: [] };
+  state.behavioral_rules = state.behavioral_rules || { speech_style: { forbidden_patterns: [] }, action_style: {} };
+  state.behavioral_rules.speech_style = state.behavioral_rules.speech_style || { forbidden_patterns: [] };
+  state.behavioral_rules.action_style = state.behavioral_rules.action_style || {};
+  const ident = state.identity || {};
+  $("name_full").value = ident.name_full || "";
+  $("name_aliases_str").value = (ident.name_aliases || []).join(", ");
+  $("age").value = ident.age || "";
+  $("birthday").value = ident.birthday || "";
+  $("gender").value = ident.gender || "female";
+  $("band_role").value = ident.band_role || "";
+  $("occupation").value = ident.occupation || "";
+  $("appearance").value = ident.appearance || "";
+  $("instrument").value = ident.instrument || "";
+  $("meta_id").value = (state.meta && state.meta.id) || "";
+  $("defense").value = (state.psychology && state.psychology.defense_mechanism) || "";
+  const fam = (state.social_context && state.social_context.family_status) || {};
+  $("family_desc").value = [fam.parents_relationship, fam.economic_class, fam.key_events].filter(Boolean).join("；");
+  $("family_handling").value = fam.topic_handling || "";
+  $("public_image").value = (state.social_context && state.social_context.public_image) || "";
+  const speech = state.behavioral_rules.speech_style || {};
+  $("sentence_style").value = speech.sentence_length || "concise";
+  $("opening_constraints").value = speech.opening_constraints || "";
+  const freq = splitFreq(state.behavioral_rules.action_style.frequency_limit);
+  $("act_daily").value = freq.daily;
+  $("act_story").value = freq.story;
+  $("interaction_logic").value = (state.behavioral_rules.interaction_logic || []).map((item) => (item.trigger || "") + " → " + (item.response || "")).join("\n");
+  $("axioms").value = (state.core_axioms || []).join("\n");
+  const mem = state.memory_anchors || {};
+  $("mem_facts").value = (mem.long_term_facts || []).join("\n");
+  $("mem_trigs").value = (mem.emotional_triggers || []).join("\n");
+  renderList("traits-list", state.psychology.core_traits, "trait");
+  renderList("fears-list", state.psychology.fears, "fear");
+  renderList("desires-list", state.psychology.desires, "desire");
+  renderList("forbid-list", speech.forbidden_patterns || [], "forbid");
+  renderList("visual-list", state.behavioral_rules.action_style.visual_focus || [], "visual");
+  const cm = state.companion_mode || {};
+  const pc = cm.peer_chat || {};
+  $("cm_attitude").value = (pc.attitude && pc.attitude.default) || "";
+  $("cm_close").value = (cm.close_rules || []).join("\n");
+  $("cm_resonate").value = (cm.resonate || []).join("\n");
+  $("cm_good").value = ((cm.style_examples || {}).correct || []).join("\n");
+  $("cm_bad").value = formatBad((cm.style_examples || {}).incorrect);
+  const cmBox = $("cm-triggers");
+  cmBox.innerHTML = "";
+  (cm.behavior_triggers || []).forEach((item, i) => {
+    const label = item.note || ((item.trigger || "") + "→" + (item.action || ""));
+    const div = document.createElement("div");
+    div.className = "tag-item";
+    div.innerHTML = "<span>" + esc(label) + "</span> <span class='tag-remove' data-fn='cm-trigger' data-i='" + i + "'>×</span>";
+    cmBox.appendChild(div);
+  });
+  const tm = state.trigger_mode || {};
+  $("tm_forbid").value = (tm.forbid || []).join("\n");
+  $("tm_framework").value = (tm.framework || []).join("\n");
+  $("tm_address").value = (tm.address || []).join("\n");
+  $("tm_good").value = ((tm.style_examples || {}).correct || []).join("\n");
+  $("tm_bad").value = formatBad((tm.style_examples || {}).incorrect);
+  const sm = state.scene_mode || {};
+  $("sm_read").value = (sm.read || []).join("\n");
+  $("sm_idle").value = (sm.idle || []).join("\n");
+  $("sm_usage").value = (sm.usage || []).join("\n");
+  $("sm_allow").value = (sm.allow || []).join("\n");
+  $("sm_forbid").value = (sm.forbid || []).join("\n");
+  $("sm_good").value = ((sm.style_examples || {}).correct || []).join("\n");
+  $("sm_bad").value = formatBad((sm.style_examples || {}).incorrect);
+  const stm = state.story_mode || {};
+  $("stm_directive").value = (stm.directive || []).join("\n");
+  $("stm_style").value = (stm.style || []).join("\n");
+  $("stm_interaction").value = (stm.interaction || []).join("\n");
+  $("stm_good").value = ((stm.style_examples || {}).correct || []).join("\n");
+  $("stm_bad").value = formatBad((stm.style_examples || {}).incorrect);
+  const pm = state.phone_mode || {};
+  $("pm_format").value = (pm.format || []).join("\n");
+  $("pm_behavior").value = (pm.behavior || []).join("\n");
+  $("pm_good").value = ((pm.style_examples || {}).correct || []).join("\n");
+  $("pm_bad").value = formatBad((pm.style_examples || {}).incorrect);
+  const peers = $("peers-list");
+  peers.innerHTML = "";
+  (state.social_context.peer_relations || []).forEach((p, i) => {
+    const div = document.createElement("div");
+    div.className = "relation-item";
+    div.innerHTML = "<div class='relation-name'>" + esc(p.target_id) + " · " + esc(p.relationship_type || "") + "</div><div class='relation-desc'>" + esc(p.dynamic_description || "") + "</div><span class='tag-remove' data-fn='peer' data-i='" + i + "'>×</span>";
+    peers.appendChild(div);
+  });
+  paintTheme(charId());
+}
+function collect() {
+  state.identity = state.identity || {};
+  state.identity.name_full = $("name_full").value.trim();
+  state.identity.name_aliases = $("name_aliases_str").value.split(",").map(s => s.trim()).filter(Boolean);
+  state.identity.age = parseInt($("age").value, 10) || 0;
+  state.identity.birthday = $("birthday").value.trim();
+  state.identity.gender = $("gender").value;
+  state.identity.band_role = $("band_role").value.trim();
+  state.identity.occupation = $("occupation").value.trim();
+  state.identity.appearance = $("appearance").value.trim();
+  state.identity.instrument = $("instrument").value.trim();
+  state.meta = state.meta || {};
+  state.meta.id = $("meta_id").value.trim();
+  state.psychology.defense_mechanism = $("defense").value.trim();
+  const famText = $("family_desc").value.trim();
+  state.social_context.family_status = state.social_context.family_status || {};
+  if (famText && famText.indexOf("；") >= 0) {
+    const bits = famText.split("；");
+    state.social_context.family_status.parents_relationship = bits[0] || "";
+    state.social_context.family_status.economic_class = bits[1] || "";
+    state.social_context.family_status.key_events = bits.slice(2).join("；");
+  } else if (famText) {
+    state.social_context.family_status.key_events = famText;
+  }
+  state.social_context.family_status.topic_handling = $("family_handling").value.trim();
+  state.social_context.public_image = $("public_image").value.trim();
+  state.behavioral_rules.speech_style = state.behavioral_rules.speech_style || {};
+  state.behavioral_rules.speech_style.sentence_length = $("sentence_style").value;
+  state.behavioral_rules.speech_style.opening_constraints = $("opening_constraints").value.trim();
+  state.behavioral_rules.action_style = state.behavioral_rules.action_style || {};
+  state.behavioral_rules.action_style.frequency_limit = "Daily: " + $("act_daily").value.trim() + " | Story: " + $("act_story").value.trim();
+  state.behavioral_rules.interaction_logic = linesOf($("interaction_logic").value).map((line) => {
+    const bits = line.split("→");
+    return { trigger: (bits[0] || "").trim(), response: bits.slice(1).join("→").trim() };
+  });
+  state.core_axioms = linesOf($("axioms").value);
+  state.memory_anchors = state.memory_anchors || {};
+  state.memory_anchors.long_term_facts = linesOf($("mem_facts").value);
+  state.memory_anchors.emotional_triggers = linesOf($("mem_trigs").value);
+  const cm = ensureMode("companion_mode");
+  cm.peer_chat = cm.peer_chat || {};
+  cm.peer_chat.attitude = cm.peer_chat.attitude || {};
+  cm.peer_chat.attitude.default = $("cm_attitude").value.trim();
+  cm.close_rules = linesOf($("cm_close").value);
+  cm.resonate = linesOf($("cm_resonate").value);
+  cm.style_examples = cm.style_examples || {};
+  cm.style_examples.correct = linesOf($("cm_good").value);
+  cm.style_examples.incorrect = parseBad($("cm_bad").value);
+  const tm = ensureMode("trigger_mode");
+  tm.forbid = linesOf($("tm_forbid").value);
+  tm.framework = linesOf($("tm_framework").value);
+  tm.address = linesOf($("tm_address").value);
+  tm.style_examples = tm.style_examples || {};
+  tm.style_examples.correct = linesOf($("tm_good").value);
+  tm.style_examples.incorrect = parseBad($("tm_bad").value);
+  const sm = ensureMode("scene_mode");
+  sm.read = linesOf($("sm_read").value);
+  sm.idle = linesOf($("sm_idle").value);
+  sm.usage = linesOf($("sm_usage").value);
+  sm.allow = linesOf($("sm_allow").value);
+  sm.forbid = linesOf($("sm_forbid").value);
+  sm.style_examples = sm.style_examples || {};
+  sm.style_examples.correct = linesOf($("sm_good").value);
+  sm.style_examples.incorrect = parseBad($("sm_bad").value);
+  const stm = ensureMode("story_mode");
+  stm.directive = linesOf($("stm_directive").value);
+  stm.style = linesOf($("stm_style").value);
+  stm.interaction = linesOf($("stm_interaction").value);
+  stm.style_examples = stm.style_examples || {};
+  stm.style_examples.correct = linesOf($("stm_good").value);
+  stm.style_examples.incorrect = parseBad($("stm_bad").value);
+  const pm = ensureMode("phone_mode");
+  pm.format = linesOf($("pm_format").value);
+  pm.behavior = linesOf($("pm_behavior").value);
+  pm.style_examples = pm.style_examples || {};
+  pm.style_examples.correct = linesOf($("pm_good").value);
+  pm.style_examples.incorrect = parseBad($("pm_bad").value);
+}
+async function loadChar(id) {
+  const flash = $("flash");
+  flash.className = "flash";
+  flash.textContent = "加载中…";
+  const res = await api("/" + id + "/config-v2");
+  if (!res.ok) {
+    flash.className = "flash err";
+    flash.textContent = "加载失败 " + res.status + "（需要登录 token）";
+    return;
+  }
+  state = await res.json();
+  state.psychology = state.psychology || { core_traits: [], fears: [], desires: [] };
+  state.social_context = state.social_context || { family_status: {}, peer_relations: [] };
+  state.behavioral_rules = state.behavioral_rules || { speech_style: {}, action_style: {} };
+  paint();
+  flash.textContent = "已加载 " + id;
+  loadClassify();
+}
+async function saveConfig() {
+  collect();
+  const id = state.meta.id;
+  const flash = $("flash");
+  const res = await api("/" + id + "/config-v2", { method: "PUT", body: JSON.stringify(state) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    flash.className = "flash err";
+    flash.textContent = "保存失败：" + (body.error || res.status);
+    return;
+  }
+  state = await res.json();
+  paint();
+  flash.className = "flash";
+  flash.textContent = "已保存 " + id;
+}
+function homeUrl() { return location.pathname.indexOf("/qqbot/") === 0 ? "/qqbot/" : "/"; }
+function hubUrl() {
+  const prefix = location.pathname.indexOf("/qqbot/") === 0 ? "/qqbot" : "";
+  return prefix + "/persona";
+}
+document.getElementById("homeBtn").onclick = (e) => {
+  e.preventDefault();
+  if (window.parent && window.parent !== window) {
+    try { window.parent.location.assign(homeUrl()); return; } catch (err) {}
+  }
+  location.assign(homeUrl());
+};
+document.getElementById("hubBtn").onclick = (e) => {
+  e.preventDefault();
+  const dest = hubUrl();
+  if (window.parent && window.parent !== window) {
+    try { window.parent.location.assign(dest); return; } catch (err) {}
+  }
+  location.assign(dest);
+};
+if (new URLSearchParams(location.search).get("embed") === "1") {
+  document.getElementById("homeBtn").style.display = "none";
+  document.getElementById("hubBtn").style.display = "none";
+}
+
+function stanceLabel(s) {
+  const hit = replyStyles.find((x) => x.id === s);
+  return hit ? hit.label : (s || "");
+}
+async function loadClassify() {
+  try {
+    replyStyles = (await sem("GET", "/reply-styles")) || [];
+  } catch (e) {
+    replyStyles = [
+      { id: "engage", label: "积极回应", builtin: true },
+      { id: "soft", label: "温柔敷衍", builtin: true },
+      { id: "deflect", label: "转移话题", builtin: true },
+      { id: "ignore", label: "无视", builtin: true }
+    ];
+  }
+  try {
+    const cfg = await sem("GET", "/config");
+    sensitivity = cfg.sensitivity != null ? cfg.sensitivity : 45;
+    $("sensitivity-slider").value = sensitivity;
+    $("sensitivity-val").textContent = sensitivity;
+  } catch (e) {}
+  try {
+    categories = (await sem("GET", "/categories")) || [];
+    if (!activeCatId || !categories.find((c) => c.id === activeCatId)) {
+      activeCatId = categories[0] ? categories[0].id : "";
+    }
+    renderCats();
+  } catch (e) {
+    $("cat-list").innerHTML = "<div class='flash err'>语义分类加载失败</div>";
+  }
+}
+function renderCats() {
+  const nav = $("classify-nav");
+  nav.innerHTML = categories.map((c) =>
+    "<button class='nav-sub' data-jump='sec-classify' data-cat='" + esc(c.id) + "'>" + esc(c.display_name) + "</button>"
+  ).join("");
+  $("cat-list").innerHTML = categories.map((c) =>
+    "<div class='cat-row" + (c.id === activeCatId ? " active" : "") + "' data-cat='" + esc(c.id) + "'><span>" + esc(c.display_name) + "</span><span>" + esc(c.priority || "") + "</span></div>"
+  ).join("") || "<div style='font-size:12px;color:var(--muted)'>暂无场景</div>";
+  renderCatEditor();
+}
+function renderCatEditor() {
+  const box = $("cat-editor");
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (!cat) { box.innerHTML = ""; return; }
+  const stances = (replyStyles.length ? replyStyles.map((x) => x.id) : ["engage", "soft", "deflect", "ignore"]);
+  const stanceOpts = stances.map((s) => "<option value='" + esc(s) + "'" + (cat.reply_stance === s ? " selected" : "") + ">" + esc(stanceLabel(s)) + "</option>").join("");
+  const prioOpts = ["low", "medium", "high", "critical"].map((p) => "<option value='" + p + "'" + (cat.priority === p ? " selected" : "") + ">" + p + "</option>").join("");
+  const locked = cat.id === "idle_ambient";
+  box.innerHTML =
+    "<div class='field-label'>正在编辑 " + esc(cat.display_name) + " · " + esc(cat.id) + "</div>" +
+    "<div class='grid-2'>" +
+    "<div class='field-group'><div class='field-label'>场景名称</div><input id='f-name' value='" + esc(cat.display_name) + "'" + (locked ? " disabled" : "") + "></div>" +
+    "<div class='field-group'><div class='field-label'>优先级</div><select id='f-priority'" + (locked ? " disabled" : "") + ">" + prioOpts + "</select></div>" +
+    "</div>" +
+    "<div class='field-group'><div class='field-label'>触发词（一行一个）</div><textarea id='f-triggers' rows='4'>" + esc((cat.trigger_words || []).join("\n")) + "</textarea></div>" +
+    "<div class='grid-2'>" +
+    "<div class='field-group'><div class='field-label'>回复风格</div><select id='f-stance'" + (locked ? " disabled" : "") + ">" + stanceOpts + "</select></div>" +
+    "<div class='field-group'><div class='field-label'>锁定话题</div><select id='f-pivot'><option value='0'" + (!cat.forbid_pivot ? " selected" : "") + ">否</option><option value='1'" + (cat.forbid_pivot ? " selected" : "") + ">是</option></select></div>" +
+    "</div>" +
+    "<div class='field-group'><div class='field-label'>参考台词（一行一条）</div><textarea id='f-samples' rows='3'>" + esc((cat.sample_lines || []).join("\n")) + "</textarea></div>" +
+    "<div class='add-input-wrapper'><button class='btn-main' type='button' onclick='saveCurrentCat()'>保存此场景</button>" +
+    (locked ? "" : "<button class='btn-secondary' type='button' onclick='deleteCategory()'>删除此场景</button>") +
+    "</div>";
+}
+document.getElementById("cat-list").onclick = (e) => {
+  const row = e.target.closest("[data-cat]");
+  if (!row) return;
+  activeCatId = row.getAttribute("data-cat");
+  renderCats();
+};
+document.getElementById("classify-nav").onclick = (e) => {
+  const row = e.target.closest("[data-cat]");
+  if (!row) return;
+  activeCatId = row.getAttribute("data-cat");
+  renderCats();
+  openAndJump("sec-classify");
+};
+document.getElementById("sensitivity-slider").oninput = (e) => {
+  const val = e.target.value;
+  $("sensitivity-val").textContent = val;
+  clearTimeout(sensTimer);
+  sensTimer = setTimeout(async () => {
+    try { await sem("PUT", "/config", { sensitivity: Number(val) }); } catch (err) {}
+  }, 400);
+};
+document.getElementById("test-text").onkeydown = (e) => { if (e.key === "Enter") runTest(); };
+async function saveCurrentCat() {
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (!cat) return;
+  const payload = {
+    display_name: $("f-name").value.trim(),
+    priority: $("f-priority").value,
+    trigger_words: linesOf($("f-triggers").value),
+    reply_stance: $("f-stance").value,
+    mode_hints: cat.mode_hints || [],
+    sample_lines: linesOf($("f-samples").value),
+    forbid_pivot: $("f-pivot").value === "1"
+  };
+  try {
+    const updated = await sem("PUT", "/categories/" + encodeURIComponent(cat.id), payload);
+    Object.assign(cat, updated);
+    renderCats();
+    $("flash").textContent = "场景已保存";
+  } catch (e) {
+    $("flash").className = "flash err";
+    $("flash").textContent = "场景保存失败：" + e.message;
+  }
+}
+async function addCategory() {
+  try {
+    const created = await sem("POST", "/categories", {
+      display_name: "新场景", priority: "medium", trigger_words: [], reply_stance: "engage",
+      mode_hints: ["direct"], sample_lines: [], forbid_pivot: false
+    });
+    categories.push(created);
+    activeCatId = created.id;
+    renderCats();
+    openAndJump("sec-classify");
+  } catch (e) {
+    $("flash").className = "flash err";
+    $("flash").textContent = "创建失败：" + e.message;
+  }
+}
+async function deleteCategory() {
+  const cat = categories.find((c) => c.id === activeCatId);
+  if (!cat || cat.id === "idle_ambient") return;
+  if (!confirm("确定删除「" + cat.display_name + "」？")) return;
+  try {
+    await sem("DELETE", "/categories/" + encodeURIComponent(cat.id));
+    categories = categories.filter((c) => c.id !== activeCatId);
+    activeCatId = categories[0] ? categories[0].id : "";
+    renderCats();
+  } catch (e) {
+    $("flash").textContent = "删除失败：" + e.message;
+  }
+}
+async function runTest() {
+  const text = $("test-text").value.trim();
+  if (!text) return;
+  $("test-result").textContent = "分析中…";
+  try {
+    const res = await sem("POST", "/classify", { text });
+    const name = (res.matched_category && res.matched_category.display_name) || "未命中";
+    const pct = Math.round((res.confidence || 0) * 100);
+    $("test-result").textContent = (res.is_hit ? "命中 " : "未命中 ") + name + " · " + pct + "%";
+    $("prompt-preview").textContent = res.generated_prompt || "(无)";
+  } catch (e) {
+    $("test-result").textContent = "测试失败：" + e.message;
+  }
+}
+function exportYAML() {
+  const t = token();
+  let url = semanticBase() + "/" + charId() + "/export";
+  if (t) url += "?auth_token=" + encodeURIComponent(t);
+  window.open(url, "_blank");
+}
+window.onload = () => loadChar("soyo");
+</script>
+</body>
+</html>

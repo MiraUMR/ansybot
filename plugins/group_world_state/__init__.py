@@ -25,6 +25,9 @@ from .blocks import (
     load_persona_module,
     warm_persona_modules,
 )
+from .character_voice import AttachCharacterVoice
+from .host_block import HostDialogue
+from .host_manager import StoryHostManager
 from .token_meter import format_static_modules
 from .characters import immersion_config
 from .memory_scopes import CharacterGroupScope
@@ -33,6 +36,7 @@ from .routes import world_state_bp
 from .scene_context import SceneContextStore
 from .store import WorldStateStore
 from .story import StorySessionStore
+from . import story_db
 
 logger = get_logger("WorldStatePlugin")
 
@@ -66,6 +70,11 @@ class GroupWorldStatePlugin(Plugin):
         container.register(SceneContextStore, scene)
         container.register(StorySessionStore, story)
         try:
+            story_db.connect()
+            container.register(StoryHostManager, StoryHostManager(container))
+        except Exception as exc:
+            logger.warning(f"story host db init failed: {exc}")
+        try:
             memory_manager = container.resolve(MemoryManager)
             memory_manager.register_scope("anon_group", AnonGroupScope)
             memory_manager.register_scope("soyo_group", SoyoGroupScope)
@@ -86,6 +95,8 @@ class GroupWorldStatePlugin(Plugin):
             ("filter_fallback_memory", FilterFallbackMemory, "记忆：fallback 过滤"),
             ("gate_memory", GateMemoryByMode, "记忆：按模式过滤查询结果"),
             ("manage", ManageWorldState, "长期记忆：管理命令"),
+            ("host_dialogue", HostDialogue, "故事主持人：开场/结束"),
+            ("attach_voice", AttachCharacterVoice, "声替：给回复附加角色语音"),
         ):
             full = f"world_state:{block_id}"
             if self.block_registry.get(full) is None:
@@ -113,6 +124,15 @@ class GroupWorldStatePlugin(Plugin):
         self.web_server.web_api_app.register_blueprint(
             persona_bp, url_prefix="/api/persona"
         )
+        try:
+            from .story_routes import story_bp
+
+            self.web_server.web_api_app.register_blueprint(
+                story_bp, url_prefix="/api/story"
+            )
+            logger.info("story host API mounted at /api/story")
+        except Exception as exc:
+            logger.warning(f"mount story host failed: {exc}")
         try:
             try:
                 from kirara_ai.plugins.semantic_classify.routes import mount_semantic_classify

@@ -88,6 +88,22 @@ class PeerChainStore:
             return False
         return (_now() - updated).total_seconds() <= ttl
 
+    def set_scene(self, group_id: str, scene: str, ttl_seconds: int = 180) -> None:
+        with _lock:
+            doc = self._read(group_id)
+            doc["group_id"] = str(group_id)
+            doc["scene"] = scene
+            doc["scene_until"] = _iso(_now() + timedelta(seconds=ttl_seconds))
+            self._write(doc)
+
+    def get_scene(self, group_id: str) -> str:
+        with _lock:
+            doc = self._read(group_id)
+            until = _parse(doc.get("scene_until") or "")
+            if until and until > _now():
+                return str(doc.get("scene") or "")
+            return ""
+
     def should_continue(self, group_id: str, character_id: str) -> Tuple[bool, str]:
         """Return (allowed, reason_hint for prompt)."""
         cfg = peer_config()
@@ -98,6 +114,18 @@ class PeerChainStore:
             until = _parse(doc.get("cooldown_until") or "")
             if until and until > _now():
                 return False, "同伴互聊冷却中，本轮别主动找同伴开口，专注回眼前的人。"
+            scene_until = _parse(doc.get("scene_until") or "")
+            scene = str(doc.get("scene") or "")
+            if scene_until and scene_until > _now() and scene == "anon_chasing_soyo":
+                if character_id == "soyo":
+                    return True, (
+                        "小爱音在追你。你是跑开的那一方，接住她「别跑/等等我」。"
+                        "不要去追她，不要说追到了，不要也好收束，不要拐到吃的/时间。"
+                    )
+                return True, (
+                    "你在追 soyorin。对面就是她，「你」=她。"
+                    "鞋带散了是你自己的。禁止说「你比soyorin跑得快」。"
+                )
             updated = _parse(doc.get("updated_at") or "")
             rounds = int(doc.get("rounds") or 0)
             if updated and (_now() - updated).total_seconds() > ttl:
@@ -110,18 +138,21 @@ class PeerChainStore:
             if remain <= 1:
                 if character_id == "soyo":
                     return True, (
-                        "这是同伴互聊最后一轮：只回一句收束，不要提问、不要开新话题。"
-                        "用素世的短句停住，例如「知道了」「行」「哈啊....」。"
+                        "这轮可以停，也可以轻轻拐一下再停。不要提问拉长。"
+                        "停法随眼前的事走，换一种停，不要套同一句。"
                     )
                 return True, (
-                    "这是同伴互聊最后一轮：只回一句收束，不要追问、不要开新话题。"
-                    "用爱音的短句停住，例如「好啦好啦」「那我等你」「嗯！」。"
+                    "这轮可以停，也可以贴半句再停。不要追问成采访。"
+                    "停法随眼前的事走，换一种停，不要套同一句。"
                 )
             if character_id == "soyo":
                 return True, (
-                    "正在和同伴（小爱音）互聊：短句真人打字；接住即可，不要主动开新话题把对话拉长。"
+                    "正在和同伴（小爱音）互聊：接住她刚说的，可以轻轻拐半句（吃的、时间、嫌一句）。"
+                    "不要另开排期，也不要每轮都收口。"
                 )
-            return True, "正在和同伴互聊：短句真人打字；接住即可，不要主动开新话题把对话拉长。"
+            return True, (
+                "正在和同伴互聊：接住她刚说的，可以轻轻拐半句。不要采访追问，也不要每轮都收口。"
+            )
 
     def record_reply(self, group_id: str, character_id: str) -> None:
         cfg = peer_config()
@@ -154,6 +185,8 @@ class PeerChainStore:
             doc["rounds"] = 0
             doc["last_speaker"] = ""
             doc["updated_at"] = _iso(_now())
+            doc["scene"] = ""
+            doc["scene_until"] = ""
             self._write(doc)
 
 
@@ -165,8 +198,7 @@ _WRAP_RE = re.compile(
     r"回头聊|先去练一下)"
 )
 _WRAP_SHORT = {
-    "嗯", "哦", "好", "行", "好吧", "知道了", "嗯嗯", "哦哦", "好啦", "行吧",
-    "好啦好啦", "嗯！", "哦！",
+    "不聊了", "先这样", "就这样", "先走了", "我去忙",
 }
 _CONTINUE_RE = re.compile(r"[？?]|要不要|去哪|怎么了|为什么|是不是|好不好")
 
@@ -288,11 +320,11 @@ def analyze_dialogue_target(
     mentioned_self: bool = False,
     is_reply_to_self: bool = False,
 ) -> Dict[str, Any]:
-    """按发送者 QQ 分流：只有配置的同伴 QQ 才是 peer；其余一律群友。
+    """按发送者账号分流（只在代码里做）：只有配置的同伴才是 peer。
 
-    不认昵称 / 显示名 / 群名片。未配置进 peer_qq 的任何账号（含其它 Bot）都当群友。
+    提示词只给「同伴 / 眼前的人」，不写入任何账号。不认昵称 / 显示名 / 名片。
     """
-    from .characters import classify_sender_qq, is_peer_qq, is_registered_bot_qq
+    from .characters import classify_sender_qq, is_peer_qq, is_registered_bot_qq, peer_address
 
     peer_cid = peer_id_for(character_id)
     peer = get_character(peer_cid) if peer_cid else {}
@@ -307,8 +339,10 @@ def analyze_dialogue_target(
     if named_self and looks_like_narrated_scene(text, character_id):
         named_self = False
 
+    call = (peer_address(character_id).get("call") or "").strip()
+    peer_label = str(peer.get("display") or peer_cid or "同伴")
     if is_peer:
-        target = f"同伴·{peer.get('display') or peer_cid}（QQ {sender_qq or peer_qq(character_id)}）"
+        target = f"同伴（当面称{call or peer_label}）"
         force = mentioned_self or is_reply_to_self or named_self
         return {
             "dialogue_target": target,
@@ -322,10 +356,10 @@ def analyze_dialogue_target(
             "extract_priority": "peer",
         }
 
-    # 非同伴 QQ：即使是登记 Bot / 同名昵称，也一律群友
+    # 非同伴：即使是登记 Bot / 同名昵称，也当眼前的人
     if mentioned_self or is_reply_to_self or named_self:
         return {
-            "dialogue_target": f"群友（QQ {sender_qq or '未知'}），对方在对你说话",
+            "dialogue_target": "眼前的人，正在对你说话",
             "is_peer": False,
             "is_bot": is_bot,
             "sender_kind": "member",
@@ -337,7 +371,7 @@ def analyze_dialogue_target(
         }
 
     return {
-        "dialogue_target": f"群友（QQ {sender_qq or '未知'}）",
+        "dialogue_target": "眼前的人",
         "is_peer": False,
         "is_bot": is_bot,
         "sender_kind": "member",

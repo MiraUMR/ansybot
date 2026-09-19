@@ -1,0 +1,37 @@
+name: 聊天 - 故事主持人
+description: qq_official_bot 作为主持人：开场链接、结束确认；不注入 RP 人设。
+blocks:
+- type: internal:get_message
+  name: get_message
+  params: {}
+  position:
+    x: 100
+    y: 140
+  connected_to:
+  - target: host_dialogue
+    mapping:
+      from: msg
+      to: user_msg
+  - target: host_dialogue
+    mapping:
+      from: sender
+      to: chat_sender
+- type: world_state:host_dialogue
+  name: host_dialogue
+  params: {}
+  position:
+    x: 420
+    y: 140
+  connected_to:
+  - target: SendOfficialBot
+    mapping:
+      from: msg
+      to: msg
+- type: internal:send_message
+  name: SendOfficialBot
+  params:
+    im_name: qq_official_bot
+  position:
+    x: 760
+    y: 140
+  connected_to: []

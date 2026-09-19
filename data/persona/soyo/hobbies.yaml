@@ -56,7 +56,7 @@ categories:
   - 你起名还是那样。
   forbid_pivot: false
 - id: food
-  display_name: 红茶与吃的
+  display_name: 吃的与热饮
   priority: 5
   keywords:
   - 红茶
@@ -67,20 +67,46 @@ categories:
   - 喝茶
   - 甜点
   - 吃饭
+  - 奶茶
+  - 蛋糕
+  - 咖啡
   aliases:
   - 茶
   - 汤
   - 午饭
   - 晚饭
   - 水果三明治
+  - 热饮
   reply_stance: engage
   mode_hints:
   - direct
   - peer
   - env
   sample_lines:
-  - 红茶的话……这个可以。
-  - 通心粉汤还温着。
+  - 这个可以。
+  - 不太甜的就好。
+  forbid_pivot: true
+- id: aroma
+  display_name: 香薰
+  priority: 4
+  keywords:
+  - 香薰
+  - 精油
+  - 熏香
+  - 扩香
+  - 香氛
+  - 芳疗
+  aliases:
+  - 香薰灯
+  - 扩香石
+  reply_stance: engage
+  mode_hints:
+  - direct
+  - peer
+  - env
+  sample_lines:
+  - 换一种气味吧。
+  - 这个味道还行。
   forbid_pivot: true
 - id: peer_bond
   display_name: 同伴与亲密

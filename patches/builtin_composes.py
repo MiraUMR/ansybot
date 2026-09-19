@@ -17,16 +17,23 @@ def drop_think_part(text: str) -> str:
     return re.sub(r"(?:<think>[\s\S]*?</think>)?([\s\S]*)", r"\1", text, flags=re.DOTALL)
 
 
+_VOICE_CAPTION_RE = re.compile(
+    r"发给|截图|soyorin|小爱音|走不动|某人|拉她|给她看",
+    re.IGNORECASE,
+)
+
+
 def _format_media_line(media_id: str, desc: Optional[str]) -> str:
-    """记忆里把图片写成可读文本，避免空 desc 导致后续回合丢图意。"""
+    """记忆里把图片写成短物象，避免把整段角色回复再喂回去。"""
     cleaned = (desc or "").strip()
     if cleaned:
-        # 压缩换行，避免撑爆近期聊天
         cleaned = re.sub(r"\s+", " ", cleaned)
-        if len(cleaned) > 240:
-            cleaned = cleaned[:240] + "…"
+        if _VOICE_CAPTION_RE.search(cleaned) or len(cleaned) >= 40:
+            return "[图片]\n"
+        if len(cleaned) > 36:
+            cleaned = cleaned[:36] + "…"
         return f"[图片: {cleaned}]\n"
-    return f"[图片 id={media_id}]\n"
+    return "[图片]\n"
 
 
 class DefaultMemoryComposer(MemoryComposer):
@@ -95,6 +102,17 @@ class DefaultMemoryDecomposer(MemoryDecomposer):
             return "刚刚"
 
 
+_CHASE_CUE_RE = re.compile(
+    r"(哭了|在哭|好像在哭|要跑|跑了|跑掉|追上|快追|去追|追呀|追啊|"
+    r"要你追|追不到|追她|快去追|人都没了|人都沒了|别回来|別回來|"
+    r"不要你了|不要她了)"
+)
+_COLD_CHASE_REPLY_RE = re.compile(
+    r"(算了.{0,16}明天|反正明天就能|麻烦死了|又不差这一会儿|追什么追|"
+    r"鞋带.{0,12}(没系|沒系|要是|松了))"
+)
+
+
 class MultiElementDecomposer(MemoryDecomposer):
     logger = get_logger("MultiElementDecomposer")
     
@@ -106,6 +124,11 @@ class MultiElementDecomposer(MemoryDecomposer):
                 # 如果包含，则分割MemoryEntry的内容为用户消息和AI回答
                 user_content = entry.content.split("你回答:")[0].strip()
                 assistant_content = entry.content.split("你回答:")[1].strip()
+                # 危急场面里的冷收束口误：只留群友那句，避免下一轮继续抄鞋带/明天见
+                if _CHASE_CUE_RE.search(user_content) and _COLD_CHASE_REPLY_RE.search(
+                    assistant_content
+                ):
+                    assistant_content = ""
 
                 # 处理用户消息
                 user_message = self.create_llm_chat_message(user_content, "user", entry.sender)
@@ -113,9 +136,10 @@ class MultiElementDecomposer(MemoryDecomposer):
                     decomposed_messages.append(user_message)
 
                 # 处理AI回答
-                assistant_message = self.create_llm_chat_message(assistant_content, "assistant", entry.sender)
-                if assistant_message:
-                    decomposed_messages.append(assistant_message)
+                if assistant_content:
+                    assistant_message = self.create_llm_chat_message(assistant_content, "assistant", entry.sender)
+                    if assistant_message:
+                        decomposed_messages.append(assistant_message)
             else:
                 # 如果不包含"你回答:"，则全部视为用户消息
                 user_message = self.create_llm_chat_message(entry.content, "user", entry.sender)

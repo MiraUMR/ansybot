@@ -13,6 +13,16 @@ data/config.yaml
 data/config.yaml.bak
 data/web/
 data/memory/
+wechat_elderly.env
+wechatpadpro.env
+wechat_data/config.yaml
+wechat_data/web/
+wechat_data/memory/
+wechatpadpro_data/
+akasha-wechat/
+cowagent.env
+cow/
+cow-data/
 data/media/
 data/plugins/
 data/frpc/
@@ -37,10 +47,20 @@ scripts/patch_dashscope_llm.py
 # Nested old NoneBot git (archive stays local; do not submodule)
 fubuki/
 
+# Character TTS weights / generated audio (download via scripts/download_character_rvc.py)
+data/tts/models/**
+!data/tts/models/.gitkeep
+data/tts/cache/
+data/tts/samples/
+
 # Logs / temp
 logs/
 botpy.log
 scripts/_tmp_*
+
+# Login QR codes (session material, not source)
+*_qr.png
+*login_qr.png
 
 # IDE / OS
 .idea/

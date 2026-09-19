@@ -28,6 +28,30 @@ import yaml
 
 logger = logging.getLogger("WorldState.Topic")
 
+_WHAT_DOING_NEEDLES = (
+    "在干嘛",
+    "在干什么",
+    "在做什么",
+    "干嘛呢",
+    "干什么呢",
+    "做什么呢",
+    "忙什么",
+    "在干啥",
+    "你在干",
+    "在搞什么",
+    "现在干嘛",
+    "在忙啥",
+    "做什么呀",
+    "干嘛呀",
+)
+
+
+def _looks_asked_what_doing(text: str) -> bool:
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    return any(n in raw for n in _WHAT_DOING_NEEDLES)
+
 PERSONA_ROOT = Path("data/persona")
 CONFIG_PATH = Path("data/config.yaml")
 TOPIC_MARKER_RE = re.compile(
@@ -45,7 +69,7 @@ _SHELL_PATTERNS = [
     re.compile(r"\[环境描写\]"),
     re.compile(r"这类话"),
     re.compile(r"【当前环境】"),
-    re.compile(r"不是某个具体群友"),
+    re.compile(r"不是某个具体"),
     re.compile(r"此刻的空气与声响"),
     re.compile(r"【当前场面】"),
 ]
@@ -630,7 +654,7 @@ def _prototype_text(character: str, cat: Dict[str, Any]) -> str:
     ]
     mod = load_hobby_module(character, cid)
     if mod:
-        parts.append(mod[:400])
+        parts.append(_strip_hobby_examples(mod)[:400])
     return "\n".join(p for p in parts if p).strip()
 
 
@@ -793,11 +817,25 @@ def parse_topic_from_prompt(prompt_blob: str) -> Optional[Tuple[str, str]]:
     return m.group("id"), m.group("stance")
 
 
+_HOBBY_EX_RE = re.compile(
+    r"\n(?:ex_ok|ex_bad):[\s\S]*?(?=\n\[/HOBBY_PACK\])",
+    re.I,
+)
+
+
+def _strip_hobby_examples(body: str) -> str:
+    """Prompt 里不放可抄的正/反例句，只留 policy/behavior。"""
+    return _HOBBY_EX_RE.sub("\n", body or "").strip()
+
+
 def hobby_module_inject(character: str, hit: TopicHit) -> str:
-    """仅注入本轮命中爱好模块；其它 pack 标记为 NOT_LOADED。"""
+    """仅注入本轮命中爱好模块。idle 是缺省分流，不再塞爱好包，避免把话题收进茶/排练/想同伴。"""
+    if hit.is_idle or hit.category_id == "idle_ambient":
+        return ""
     body = load_hobby_module(character, hit.category_id)
     if not body:
         return ""
+    body = _strip_hobby_examples(body)
     return (
         "[HOBBY_CONTEXT]\n"
         f"ACTIVE_ID: {hit.category_id}\n"
@@ -922,6 +960,64 @@ def peer_interaction_lock_text(character: str, mode: str = "") -> str:
     ).strip()
 
 
+def peer_distress_lock_text(character: str, mode: str = "") -> str:
+    call = "soyorin" if (character or "").strip() == "anon" else "小爱音"
+    return (
+        "[TOPIC_LOCK]\n"
+        "id: peer_distress\n"
+        "stance: engage\n"
+        f"mode: {mode or 'direct'}\n"
+        "mode_hint: peer_interaction\n"
+        "reply_stance: engage\n"
+        "detector: peer_distress_cue\n"
+        "ACTION: chase_now\n"
+        "FORBID: idle_ambient|activity_menu|deflect|daily_close|算了明天见|麻烦死了|鞋带借口\n"
+        "HOBBY_PACK: NOT_LOADED\n"
+        f"OUTPUT: 1-3 short lines going after {call} now; type3_ok; no_QA_to_crowd; no_wrap_up\n"
+        "NOTE: 上文若有「算了明天见/鞋带没系/麻烦」是口误，这轮作废。立刻追，不要停。\n"
+        "[/TOPIC_LOCK]"
+    ).strip()
+
+
+def chase_scene_lock_text(character: str, mode: str = "") -> str:
+    """互聊续追：爱音是追的人，素世是跑开/被追的人。"""
+    cid = (character or "").strip()
+    if cid == "soyo":
+        return (
+            "[TOPIC_LOCK]\n"
+            "id: chase_scene\n"
+            "stance: engage\n"
+            f"mode: {mode or 'peer'}\n"
+            "mode_hint: peer_interaction\n"
+            "reply_stance: engage\n"
+            "detector: chase_in_flight\n"
+            "ACTION: being_chased\n"
+            "ROLE: 你是跑开/被追的那一方；小爱音在追你，不是你去追她\n"
+            "FORBID: idle_ambient|deflect|也好收束|追到了|去追小爱音|activity_menu\n"
+            "HOBBY_PACK: NOT_LOADED\n"
+            "OUTPUT: 接住她「别跑/等等我」：停、回头、别扭、还在生气都可以；"
+            "禁止说自己追到了；禁止闲聊收束成也好/吃的/时间\n"
+            "NOTE: 不要客串成追人的那个。\n"
+            "[/TOPIC_LOCK]"
+        ).strip()
+    return (
+        "[TOPIC_LOCK]\n"
+        "id: chase_scene\n"
+        "stance: engage\n"
+        f"mode: {mode or 'peer'}\n"
+        "mode_hint: peer_interaction\n"
+        "reply_stance: engage\n"
+        "detector: chase_in_flight\n"
+        "ACTION: still_chasing\n"
+        "ROLE: 你在追 soyorin；对面的「你」就是她。鞋带散了是你自己的\n"
+        "FORBID: idle_ambient|你比soyorin|把soyorin当第三人称|鞋带怪她|activity_menu\n"
+        "HOBBY_PACK: NOT_LOADED\n"
+        "OUTPUT: 对她说话（可用你）；禁止「你鞋带散着都比soyorin跑得快」这种把她说成旁边第三人\n"
+        "NOTE: 不要跟旁边的人比谁跑得快。\n"
+        "[/TOPIC_LOCK]"
+    ).strip()
+
+
 def force_peer_interaction_override(
     character: str,
     *,
@@ -931,7 +1027,22 @@ def force_peer_interaction_override(
 ) -> Optional[str]:
     """DIRECT@ + 点名同伴：跳过 topic_classify，强制 peer_interaction/engage。"""
     prompt = user_prompt or ""
-    if "[SYSTEM: EXTERNAL_TRIGGER]" not in prompt:
+    is_trigger = "[SYSTEM: EXTERNAL_TRIGGER]" in prompt
+    is_peer_chat = "Bot 互聊" in prompt
+    if not is_trigger and not is_peer_chat:
+        return None
+    try:
+        from .style_guard import looks_chase_in_flight, looks_peer_distress_cue
+
+        if is_peer_chat and (
+            looks_chase_in_flight(source_text) or looks_peer_distress_cue(source_text)
+        ):
+            return chase_scene_lock_text(character, mode=mode or "peer")
+        if is_trigger and looks_peer_distress_cue(source_text):
+            return peer_distress_lock_text(character, mode=mode)
+    except Exception:
+        pass
+    if not is_trigger:
         return None
     if not source_mentions_peer(character, source_text):
         # 触发器已判定 TYPE3 时同样强制
@@ -940,9 +1051,25 @@ def force_peer_interaction_override(
     return peer_interaction_lock_text(character, mode=mode)
 
 
-def topic_lock_text(character: str, hit: TopicHit, mode: str = "") -> str:
+def topic_lock_text(
+    character: str,
+    hit: TopicHit,
+    mode: str = "",
+    source_text: str = "",
+    group_id: str = "",
+) -> str:
     cid = (character or "").strip() or "anon"
     mode = (mode or "").strip()
+    if mode == "peer":
+        try:
+            from .style_guard import looks_chase_in_flight, looks_peer_distress_cue
+
+            if looks_chase_in_flight(source_text) or looks_peer_distress_cue(
+                source_text
+            ):
+                return chase_scene_lock_text(character, mode=mode)
+        except Exception:
+            pass
     matched = ",".join(hit.matched_terms[:6]) or "-"
     pivot = ",".join(hit.forbid_pivot_ids) or "primary_hobby"
     stance_raw = str(hit.stance or "soft")
@@ -960,7 +1087,11 @@ def topic_lock_text(character: str, hit: TopicHit, mode: str = "") -> str:
             if stance_raw not in ("engage", "soft", "deflect", "ignore"):
                 stance_base = "soft"
     samples = ""
-    if hit.sample_lines and stance_base in ("engage", "soft"):
+    if (
+        hit.sample_lines
+        and stance_base in ("engage", "soft")
+        and hit.category_id not in ("food", "aroma", "idle_ambient")
+    ):
         samples = "SAMPLE: " + " | ".join(hit.sample_lines[:2]) + "\n"
 
     # 群友@（direct）：peer_bond 会把「提到同伴名字」演成偶遇/告白戏，必须卸载
@@ -976,7 +1107,7 @@ def topic_lock_text(character: str, hit: TopicHit, mode: str = "") -> str:
             "HOBBY_PACK: NOT_LOADED\n"
             "FORBID: dramatize_meet_cute|RP_scene_answer|FAQ|question_to_crowd|encyclopedia\n"
             "OUTPUT: 1-2 short self WeChat lines; no_QA; no_full_reunion_skit\n"
-            "NOTE: 群友点到同伴名字≠要演完整偶遇/约会；称呼与轻提以 EXTERNAL_TRIGGER/P0 为准\n"
+            "NOTE: 点到同伴名字≠要演完整偶遇/约会；称呼与轻提以 EXTERNAL_TRIGGER/P0 为准\n"
             "[/TOPIC_LOCK]"
         ).strip()
 
@@ -987,22 +1118,81 @@ def topic_lock_text(character: str, hit: TopicHit, mode: str = "") -> str:
         )
     elif hit.is_idle or stance_base == "deflect":
         ban = (
-            "FORBID_PIVOT: guitar_intonation|retune|practice_filler"
+            "FORBID_PIVOT: guitar_retune_drill|practice_schedule_talk"
             if cid == "anon"
-            else "FORBID_PIVOT: tea_menu|rehearsal_schedule_filler"
+            else "FORBID_PIVOT: tea_menu_lecture|rehearsal_schedule_filler"
         )
         env = (
             "ENV: not_a_question; react_mood_time_object_only; no_speaker_hunt\n"
             if mode in ("env", "env_peer", "scene")
             else ""
         )
-        rules = (
-            f"ACTION: deflect\n"
-            f"UNLOADED_PRIMARY: {pivot}\n"
-            f"{ban}\n"
-            f"{env}"
-            "OUTPUT: 1-2 short self lines; no_QA; no_schedule\n"
-        )
+        if mode == "direct":
+            distress = False
+            try:
+                from .style_guard import looks_peer_distress_cue
+
+                distress = looks_peer_distress_cue(source_text)
+            except Exception:
+                distress = False
+            if distress:
+                rules = (
+                    "ACTION: chase_now\n"
+                    f"{ban}\n"
+                    "FORBID: activity_menu|算了明天见|麻烦死了|鞋带借口\n"
+                    "OUTPUT: 1-3 short lines going after peer now; no_QA; no_wrap_up\n"
+                )
+            elif _looks_asked_what_doing(source_text):
+                wx_off = ""
+                try:
+                    from .weather import weather_on_cooldown
+
+                    if weather_on_cooldown(character, group_id, source_text):
+                        wx_off = "FORBID: weather_talk|cold_hot_sky_filler\nACTION: skip_weather\n"
+                except Exception:
+                    wx_off = ""
+                rules = (
+                    "ACTION: answer_now_doing\n"
+                    f"{ban}\n"
+                    f"{wx_off}"
+                    "OUTPUT: 1-3 short self lines; invent one small thing happening now; "
+                    "no_fixed_activity_menu; no_default_tea_rehearsal_phone_or_thinking_of_peer; "
+                    "no_QA; no_schedule; skip_weather unless asked\n"
+                )
+            else:
+                wx_off = ""
+                try:
+                    from .weather import weather_on_cooldown
+
+                    if weather_on_cooldown(character, group_id, source_text):
+                        wx_off = "FORBID: weather_talk|cold_hot_sky_filler\nACTION: skip_weather\n"
+                except Exception:
+                    wx_off = ""
+                rules = (
+                    "ACTION: reply_this_line\n"
+                    f"{ban}\n"
+                    f"{wx_off}"
+                    "OUTPUT: 1-3 short self lines answering this message; "
+                    "do_not_invent_solo_activity; do_not_pick_up_old_topics_unless_this_line_is_about_them; "
+                    "no_QA; no_schedule; skip_weather unless asked\n"
+                )
+        else:
+            wx_off = ""
+            try:
+                from .weather import weather_on_cooldown
+
+                if weather_on_cooldown(character, group_id, source_text):
+                    wx_off = "FORBID: weather_talk|cold_hot_sky_filler\nACTION: skip_weather\n"
+            except Exception:
+                wx_off = ""
+            rules = (
+                f"ACTION: deflect\n"
+                f"UNLOADED_PRIMARY: {pivot}\n"
+                f"{ban}\n"
+                f"{env}"
+                f"{wx_off}"
+                "OUTPUT: 1-2 short self lines; no_QA; no_schedule\n"
+            )
     elif stance_base == "engage":
         rules = (
             "ACTION: engage_topic\n"
@@ -1035,7 +1225,13 @@ def topic_lock_text(character: str, hit: TopicHit, mode: str = "") -> str:
     return lock.strip()
 
 
-def topic_critical_addon(character: str, hit: TopicHit, mode: str = "") -> str:
+def topic_critical_addon(
+    character: str,
+    hit: TopicHit,
+    mode: str = "",
+    group_id: str = "",
+    source_text: str = "",
+) -> str:
     mode = (mode or "").strip()
     if mode == "direct" and hit.category_id == "peer_bond":
         return (
@@ -1046,42 +1242,4 @@ def topic_critical_addon(character: str, hit: TopicHit, mode: str = "") -> str:
             "HOBBY peer_bond: NOT_LOADED\n"
             "[/P0]"
         )
-    if mode not in ("env", "env_peer", "scene"):
-        return ""
-    # env_peer：主动点同伴续聊，不要用 idle 自语 P0 盖掉
-    if mode == "env_peer":
-        return ""
-    stance_raw = str(hit.stance or "soft")
-    stance_base = stance_raw
-    try:
-        from kirara_ai.plugins.semantic_classify.yaml_store import resolve_reply_stance_base
-
-        stance_base = resolve_reply_stance_base(
-            (character or "").strip() or "anon", stance_raw
-        )
-    except Exception:
-        try:
-            from semantic_classify.yaml_store import resolve_reply_stance_base  # type: ignore
-
-            stance_base = resolve_reply_stance_base(
-                (character or "").strip() or "anon", stance_raw
-            )
-        except Exception:
-            if stance_raw not in ("engage", "soft", "deflect", "ignore"):
-                stance_base = "soft"
-    if not (hit.is_idle or stance_base == "deflect"):
-        return ""
-    cid = (character or "").strip() or "anon"
-    ban = (
-        "FORBID: guitar_intonation|retune|loose_string_filler"
-        if cid == "anon"
-        else "FORBID: tea_menu|rehearsal_filler"
-    )
-    return (
-        "[P0: TOPIC LOCK]\n"
-        "id: idle_ambient\n"
-        "ACTION: mood_time_object_only\n"
-        f"{ban}\n"
-        "OTHER_HOBBY_PACKS: NOT_LOADED\n"
-        "[/P0]"
-    )
+    return ""

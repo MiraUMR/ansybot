@@ -19,12 +19,17 @@ _CJK_RE = re.compile(
 
 SYSTEM_MARKERS: List[Tuple[str, str]] = [
     ("人设.P0", r"\[P0:"),
-    ("人设.companion", r"(?m)^## 普通群聊（无标签"),
-    ("人设.trigger", r"(?m)^## 被@时的响应范式"),
-    ("人设.scene", r"(?m)^# 场景记忆读取规则"),
-    ("人设.story", r"(?m)^# 故事模式"),
+    ("人设.CRITICAL", r"\[CRITICAL"),
+    ("人设.role", r"<role\b"),
+    ("人设.lock", r"<lock>"),
+    ("人设.at_mode", r"<at_mode>"),
+    ("人设.companion", r"<companion_mode"),
+    ("人设.scene", r"<scene_mode>"),
+    ("人设.outsider", r"<outsider>"),
+    ("人设.trigger.md", r"(?m)^## 被@时的响应范式"),
+    ("人设.companion.md", r"(?m)^## 普通群聊（无标签"),
     ("本群长期关系", r"(?m)^# 本群长期关系"),
-    ("当前群聊", r"(?m)^# 当前群聊"),
+    ("当下", r"(?m)^# 当下"),
     ("当前信息", r"(?m)^# 当前信息"),
     ("近期聊天", r"(?m)^# 近期聊天"),
     ("回复规则", r"(?m)^记住："),
@@ -36,6 +41,8 @@ USER_MARKERS: List[Tuple[str, str]] = [
     ("本轮.STORY", r"\[SYSTEM: STORY MODE\]"),
     ("本轮.STORY_END", r"\[SYSTEM: STORY_END\]"),
     ("本轮.TRIGGER", r"\[SYSTEM: EXTERNAL_TRIGGER\]"),
+    ("本轮.话题锁", r"【本轮话题锁】"),
+    ("本轮.识图", r"已识别图片内容"),
     ("本轮.环境", r"【当前环境】"),
     ("本轮.系统", r"【系统】"),
 ]
@@ -209,9 +216,15 @@ def split_user_prompt(text: str) -> List[Tuple[str, str]]:
 
 
 def infer_character(system: str) -> str:
-    if "你就是千早爱音本人" in (system or ""):
+    blob = system or ""
+    if "千早爱音" in blob and "长崎素世" not in blob[:200]:
+        if "你是千早爱音" in blob or "你就是千早爱音" in blob:
+            return "anon"
+    if "你是长崎素世" in blob or "你就是长崎素世" in blob:
+        return "soyo"
+    if "你就是千早爱音本人" in blob:
         return "anon"
-    if "你就是长崎素世本人" in (system or ""):
+    if "你就是长崎素世本人" in blob:
         return "soyo"
     return ""
 

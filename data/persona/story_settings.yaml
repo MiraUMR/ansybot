@@ -1,0 +1,25 @@
+# Story Mode V1.5 host settings
+max_turns: 7
+# Public base for form links (nginx /qqbot/backend-api → Kirara web_api)
+public_base_url: "https://ansy.love/qqbot/backend-api"
+# Browser-facing API root used in form action / redirects
+public_api_prefix: "/qqbot/backend-api/api/story"
+llm_model: ""  # empty = LLMManager default TextChat model
+
+templates:
+  open: "🎭 故事已开启（{scene_type}）！参与者：{bots}。\n请发起人打开链接填写引导：\n{url}"
+  turn_hint: "⏳ 第 {n}/{max} 幕已演出。请继续在网页填写下一轮指令，或 @我 结束。"
+  end: "✅ 故事已完结。关键记忆已整理。"
+  help: "主持人用法：\n· @我 开始故事 [场景]\n· 打开链接在网页填写引导\n· @我 结束 / end / stop"
+  narration: "【旁白】第{n}/{max}幕 · {scene}"
+  max_turns_hint: "已达最大幕数 {max}，请结束故事或点网页「结束故事」。"
+
+fantasy_keywords:
+  - 异世界
+  - 奇幻
+  - 做梦
+  - 梦境
+  - fantasy
+  - 冒险世界
+  - 魔法
+  - 穿越

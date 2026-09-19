@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>故事引导</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; line-height: 1.5; }
+    h1 { font-size: 1.25rem; }
+    .meta { color: #555; font-size: 0.9rem; margin-bottom: 12px; }
+    .flash { background: #eef6ff; border: 1px solid #bcd; padding: 8px 12px; margin-bottom: 12px; }
+    .err { background: #ffecec; border-color: #e99; }
+    .history { background: #f7f7f7; padding: 12px; max-height: 280px; overflow: auto; white-space: pre-wrap; }
+    label { display: block; margin-top: 12px; font-weight: 600; }
+    select, textarea, button { width: 100%; margin-top: 6px; box-sizing: border-box; }
+    textarea { min-height: 100px; }
+    .row { display: flex; gap: 8px; margin-top: 16px; }
+    .row button { flex: 1; padding: 10px; }
+    button.end { background: #444; color: #fff; border: none; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>故事引导</h1>
+  <div class="flash err __ERROR_CLASS__">__ERROR__</div>
+  <div class="flash __FLASH_CLASS__">__FLASH__</div>
+  <div class="__BODY_CLASS__">
+    <div class="meta">
+      场景：__SCENE_DESC__（__SCENE_TYPE__）<br/>
+      进度：第 __TURN__ / __MAX__ 幕<br/>
+      状态：__STATUS__
+    </div>
+    <h2 style="font-size:1rem;">剧情记录</h2>
+    <div class="history">__HISTORY__</div>
+    <div class="__FORM_CLASS__">
+      <form method="post" action="__API_PREFIX__/submit">
+        <input type="hidden" name="sid" value="__SID__" />
+        <input type="hidden" name="uid" value="__UID__" />
+        <input type="hidden" name="token" value="__TOKEN__" />
+        <label>本轮发言角色
+          <select name="target_bot">
+            <option value="anon">爱音 (anon)</option>
+            <option value="soyo">素世 (soyo)</option>
+          </select>
+        </label>
+        <label>行动引导
+          <textarea name="action_prompt" required placeholder="例如：爱音拉着素世去买苹果糖，此时发生什么？"></textarea>
+        </label>
+        <div class="row">
+          <button type="submit">提交引导</button>
+        </div>
+      </form>
+      <form method="post" action="__API_PREFIX__/end" style="margin-top:8px;">
+        <input type="hidden" name="sid" value="__SID__" />
+        <input type="hidden" name="uid" value="__UID__" />
+        <input type="hidden" name="token" value="__TOKEN__" />
+        <button class="end" type="submit">结束故事</button>
+      </form>
+    </div>
+    <p class="__DONE_CLASS__">本场故事已结束，链接失效。</p>
+  </div>
+</body>
+</html>

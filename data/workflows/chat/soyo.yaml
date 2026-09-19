@@ -56,6 +56,10 @@ blocks:
     mapping:
       from: sender
       to: chat_sender
+  - target: persona_layers
+    mapping:
+      from: msg
+      to: user_msg
   - target: guard_character_reply
     mapping:
       from: sender
@@ -98,14 +102,14 @@ blocks:
     x: 1710
     y: 138
   connected_to:
-  - target: SendSoyoBot
+  - target: attach_character_voice
     mapping:
       from: msg
       to: msg
 - type: internal:text_block
   name: 本轮用户发言
   params:
-    text: '{user_name}在群{group_name}对你说：{user_msg}'
+    text: '{user_name}对你说：{user_msg}'
   position:
     x: 100
     y: 530
@@ -208,12 +212,12 @@ blocks:
 - type: internal:text_block
   name: 当场上下文（群名·时间·近期聊天）
   params:
-    text: '# 当前群聊
+    text: '# 当下
 
-      你现在在群「{group_name}」（群号 {group_id}）。只根据这个群正在发生的对话和本群记忆回复，不要把另一个群的群友、话题或称呼带到这里。
+      只根据眼前这段对话和这边的记忆回复，不要把别处的人、话题或称呼带过来。不要念出任何账号或编号。
 
 
-      被@走 Trigger；场面/环境用感知直接反应；同伴互聊走 Companion。不要解说系统标签，不要当导演复盘。
+      被点到走 Trigger；场面/环境用感知直接反应；同伴互聊走 Companion。不要解说系统标签，不要当导演复盘。
 
 
       # 当前信息
@@ -225,7 +229,7 @@ blocks:
 
       # 近期聊天（仅同伴与被@的真人对话；不含环境旁白）
 
-      以下是之前的对话，用来延续语气和刚聊过的事，不要当众整段复读，也不要用它推翻「本群长期关系」。
+      以下是之前的对话，用来接上语气和刚说过的称呼、事实。对方这句没在说的旧话题不要自己捡回来当主题。不要当众整段复读，也不要用它推翻「本群长期关系」。
 
       -- 对话记录开始 --
 
@@ -251,7 +255,7 @@ blocks:
 
       # 模式分流（路由）
 
-      - [P0] / EXTERNAL_TRIGGER → 禁止群友问答体，只做角色反应；有 peer_interaction 仲裁则类型3直出
+      - [P0] / EXTERNAL_TRIGGER → 禁止问答体，只做角色反应；有 peer_interaction 仲裁则类型3直出
 
       - 同伴互聊 → 接话；接近互聊上限时短句收束，勿硬抛新话题
 
@@ -462,3 +466,15 @@ blocks:
     x: 2140
     y: 60
   connected_to: []
+- type: world_state:attach_voice
+  name: attach_character_voice
+  params:
+    character: soyo
+  position:
+    x: 1920
+    y: 60
+  connected_to:
+  - target: SendSoyoBot
+    mapping:
+      from: msg
+      to: msg

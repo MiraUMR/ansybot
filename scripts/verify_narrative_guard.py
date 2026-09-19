@@ -467,6 +467,22 @@ _sg = module_from_spec(_sg_spec)
 sys.modules["group_world_state.style_guard"] = _sg
 _sg_spec.loader.exec_module(_sg)
 
+check(
+    "空 markdown 围栏拆掉",
+    _sg.scrub_markdown_markup("```markdown\n\n```") == "",
+)
+check(
+    "markdown 围栏只留正文",
+    _sg.scrub_markdown_markup("```markdown\n诶忘记了\n```") == "诶忘记了",
+)
+check(
+    "markdown 加粗拆掉",
+    _sg.scrub_markdown_markup("我**真的**忘了") == "我真的忘了",
+)
+check(
+    "markdown 格式算违规",
+    "markdown格式" in _sg.find_anon_violations("```markdown\n\n```"),
+)
 check("无问号 会不会 算提问", _sg.looks_like_question("会不会在意爱音发了什么"))
 check("无问号 什么呢 算提问", _sg.looks_like_question("刷sns都会看到什么呢"))
 check("还没到呢 不算提问", not _sg.looks_like_question("……还没到呢。九月八号。"))

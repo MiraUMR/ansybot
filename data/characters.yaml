@@ -1,6 +1,17 @@
 # 双角色登记（IM / 工作流 / 别名）。
 # 同伴身份与 QQ 绑定写在角色人设 base 的【同伴绑定】```peer 块里，改人设即改分流。
+# 硬约束：anon QQ 3845655536 / qq_user_bot 出站点不变。
 characters:
+  host:
+    display: 故事主持人
+    im_name: qq_official_bot
+    qq: ""
+    workflow: chat:host
+    memory_scope: ""
+    aliases:
+    - 主持人
+    - Host
+    - host
   anon:
     display: 千早爱音
     im_name: qq_user_bot
@@ -32,7 +43,7 @@ characters:
 
 # 同伴互聊轮次（身份绑定见各角色人设 base）
 peer:
-  max_rounds: 3
+  max_rounds: 5
   cooldown_seconds: 180
   chain_ttl_seconds: 600
 

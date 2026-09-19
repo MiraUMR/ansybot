@@ -14,9 +14,9 @@ except Exception:  # pragma: no cover
 
     logger = logging.getLogger("WorldState.Narration")
 
-NARRATION_SYSTEM = """你是群聊 RP 的场景书记。把群友的一句中文发言改写成第三人称环境旁白或环境音效，供角色感知世界用。
+NARRATION_SYSTEM = """你是场景书记。把一句中文发言改写成第三人称环境旁白或环境音效，供角色感知世界用。
 规则：
-1. 不要出现真实群友昵称、QQ、@；不要写成「有人问你」。
+1. 不要出现真实昵称、账号、编号、@；不要写成「有人问你」。
 2. 用「空气中 / 窗外 / 耳边 / 场地里」等非指向性主体。
 3. 保留原意与情绪，1 句即可，可加轻描写，不要扩写成小剧场。
 4. 开头必须是 [场景旁白] 或 [环境描写] 之一。
@@ -34,14 +34,26 @@ NARRATION_SYSTEM = """你是群聊 RP 的场景书记。把群友的一句中文
 _AT_LEAD_RE = re.compile(r"^[@＠]\S+\s+")
 _CQ_AT_RE = re.compile(r"\[CQ:at,[^\]]+\]", re.IGNORECASE)
 _CQ_REPLY_RE = re.compile(r"\[CQ:reply,[^\]]+\]", re.IGNORECASE)
+_CQ_IMAGE_RE = re.compile(r"\[CQ:image,[^\]]+\]", re.IGNORECASE)
+_IMAGE_MSG_RE = re.compile(r"\[ImageMessage:[^\]]*\]", re.IGNORECASE)
+_FACE_RE = re.compile(r"\[Face:\d+\]", re.IGNORECASE)
+_REPLY_MARK_RE = re.compile(r"\[Reply:\d+\]", re.IGNORECASE)
 _AT_TOKEN_RE = re.compile(r"[@＠]\S+")
 _BOT_MARK_RE = re.compile(r"(?i)@bot\b")
 _YOU_RE = re.compile(r"(你|你们|您)")
 
 
 def strip_addressing(text: str) -> str:
-    """去掉 @、引用和明显的第二人称指向，避免旁白仍像在对角色说话。"""
+    """去掉 @、引用、图片载荷和明显的第二人称指向，避免旁白仍像在对角色说话。
+
+    ImageMessage 的 alt 经常是上一条 bot 自己的回复（识图/媒体描述），
+    不能当「空气里有人说起……」再喂回去，否则会把机厅、头发这类旧话头循环起来。
+    """
     cleaned = (text or "").strip()
+    cleaned = _IMAGE_MSG_RE.sub(" ", cleaned)
+    cleaned = _CQ_IMAGE_RE.sub(" ", cleaned)
+    cleaned = _FACE_RE.sub(" ", cleaned)
+    cleaned = _REPLY_MARK_RE.sub(" ", cleaned)
     cleaned = _CQ_AT_RE.sub(" ", cleaned)
     cleaned = _CQ_REPLY_RE.sub(" ", cleaned)
     cleaned = _BOT_MARK_RE.sub(" ", cleaned)

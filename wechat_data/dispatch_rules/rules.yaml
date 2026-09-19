@@ -1,0 +1,93 @@
+# 微信中老年陪伴机器人 - 调度规则
+# 本文件仅含 wechat_elderly 适配器相关规则，与 QQ 规则完全隔离
+
+# ─── 私聊：直接回复 ────────────────────────────────────────────
+- rule_id: wechat_elderly_private
+  name: 微信私聊·直接陪伴
+  description: 微信私聊消息直接触发莫莫回复
+  workflow_id: chat:wechat_elderly
+  priority: 5
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: wechat_elderly
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 私聊
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.65
+
+# ─── 群聊：被@才回复 ──────────────────────────────────────────
+# 微信群聊场景下，仅被@时才回复，避免打扰群聊节奏
+- rule_id: wechat_elderly_group_mention
+  name: 微信群聊·被@
+  description: 微信群聊中被@才触发莫莫回复
+  workflow_id: chat:wechat_elderly
+  priority: 5
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: wechat_elderly
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+  - operator: or
+    rules:
+    - type: bot_mention
+      config: {}
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.65
+
+# ─── 兜底记忆写入 ─────────────────────────────────────────────
+- rule_id: fallback_wechat_elderly
+  name: 默认记忆写入（wechat_elderly）
+  description: 所有未匹配消息仍写入记忆，保证上下文连贯
+  workflow_id: chat:memory_store_wechat_elderly
+  priority: 0
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: wechat_elderly
+  - operator: or
+    rules:
+    - type: fallback
+      config: {}
+  metadata: {}
+
+# ─── 系统指令 ─────────────────────────────────────────────────
+- rule_id: wechat_elderly_clear_memory
+  name: 清空记忆（微信版）
+  workflow_id: system:clear_memory
+  priority: 10
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: im_adapter
+      config:
+        im_name: wechat_elderly
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /清空记忆
+  metadata:
+    category: system
+    permission: admin

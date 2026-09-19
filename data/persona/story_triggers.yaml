@@ -20,6 +20,15 @@ story_triggers:
     - 一起去看live
     - 去看live
     - 看live
+  fantasy_keywords:
+    - 异世界
+    - 奇幻
+    - 做梦
+    - 梦境
+    - fantasy
+    - 冒险世界
+    - 魔法
+    - 穿越
   end_commands:
     - "@{bot_name} end"
     - "@{bot_name} 结束"

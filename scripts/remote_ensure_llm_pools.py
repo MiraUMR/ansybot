@@ -9,9 +9,11 @@ needed = [
     "qwen-plus",
     "qwen-flash",
     "qwen-turbo",
-    "qwen3-vl-plus",
-    "qwen3-vl-flash",
-    "qwen-vl-plus",
+    "qwen3.8-flash",
+    "qwen3.6-flash",
+    "qwen3.7-plus",
+    "qwen3.8-max",
+    "deepseek-v4.1-flash",
 ]
 changed = False
 for b in data.get("llms", {}).get("api_backends", []) or []:

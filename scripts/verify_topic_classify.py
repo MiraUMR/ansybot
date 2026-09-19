@@ -60,8 +60,12 @@ check("用例1 idle", h1.category_id == "idle_ambient", f"got={h1.category_id}")
 
 lock = topic.topic_lock_text("anon", h1, mode="env")
 check("idle 结构化锁", "[TOPIC_LOCK]" in lock and "ACTION: deflect" in lock)
-check("idle 注入 HOBBY_PACK", "[HOBBY_CONTEXT]" in lock and "[HOBBY_PACK]" in lock)
+check("idle 不注入爱好包", "[HOBBY_CONTEXT]" not in lock and "[HOBBY_PACK]" not in lock)
 check("idle 不注入吉他事实", "ESP_ULTRATONE" not in lock)
+lock_d = topic.topic_lock_text("anon", h1, mode="direct", source_text="哈哈")
+check("idle @接眼前这句", "ACTION: reply_this_line" in lock_d and "answer_now_doing" not in lock_d)
+lock_q = topic.topic_lock_text("anon", h1, mode="direct", source_text="你在干嘛")
+check("idle 被问才报正在做", "ACTION: answer_now_doing" in lock_q)
 
 h2 = topic.classify_text("anon", "今晚吉他排练别迟到")
 check("用例2 band", h2.category_id == "band_practice", f"got={h2.category_id}")
@@ -87,9 +91,11 @@ for char in ("anon", "soyo"):
     det.setdefault("keyword_min_score", 8)
     topic.save_hobbies_doc(char, {"detector": det, "categories": doc["categories"]})
 
-anon_base = (ROOT / "data/persona/anon/modules/anon_base.md").read_text(encoding="utf-8")
-check("base 已去掉爱好分层长文", "【高共鸣话题】" not in anon_base)
-check("base 指向爱好设定", "爱好设定" in anon_base)
+anon_base_path = ROOT / "data/persona/anon/modules/anon_base.md"
+if anon_base_path.is_file():
+    anon_base = anon_base_path.read_text(encoding="utf-8")
+    check("base 已去掉爱好分层长文", "【高共鸣话题】" not in anon_base)
+    check("base 指向爱好设定", "爱好设定" in anon_base)
 
 routes = (PLUGIN / "persona_routes.py").read_text(encoding="utf-8")
 ui = (PLUGIN / "persona_ui.html").read_text(encoding="utf-8")

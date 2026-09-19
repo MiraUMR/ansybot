@@ -1,0 +1,196 @@
+name: 聊天 - 微信中老年陪伴（莫莫）
+description: 温暖晚辈陪伴角色，服务中老年微信用户。与 QQ 机器人完全隔离。
+blocks:
+
+# ─── 1. 消息入口 ───────────────────────────────────────────────
+- type: internal:get_message
+  name: get_message
+  params: {}
+  position:
+    x: 100
+    y: 138
+  connected_to:
+  - target: query_memory
+    mapping:
+      from: sender
+      to: chat_sender
+  - target: gated_chat_memory
+    mapping:
+      from: msg
+      to: user_msg
+  - target: ChatMessageConstructor
+    mapping:
+      from: msg
+      to: user_msg
+
+# ─── 2. 记忆查询 ───────────────────────────────────────────────
+- type: internal:chat_memory_query
+  name: query_memory
+  params:
+    scope_type: wechat_elderly_private
+    # 独立命名空间，与 QQ 机器人记忆完全隔离
+  position:
+    x: 420
+    y: 300
+  connected_to:
+  - target: ChatMessageConstructor
+    mapping:
+      from: memory_content
+      to: memory_content
+
+# ─── 3. 消息构造 ───────────────────────────────────────────────
+- type: internal:chat_message_constructor
+  name: ChatMessageConstructor
+  params: {}
+  position:
+    x: 800
+    y: 138
+  connected_to:
+  - target: llm_chat
+    mapping:
+      from: llm_msg
+      to: prompt
+
+# ─── 4. LLM 推理 ───────────────────────────────────────────────
+- type: internal:chat_completion
+  name: llm_chat
+  params:
+    enable_model_failover: true
+    # temperature 建议在 LLM 池配置中设为 0.65
+  position:
+    x: 1100
+    y: 138
+  connected_to:
+  - target: response_converter
+    mapping:
+      from: resp
+      to: resp
+  - target: gated_chat_memory
+    mapping:
+      from: llm_resp
+      to: llm_resp
+
+# ─── 6. 格式转换 ───────────────────────────────────────────────
+- type: internal:chat_response_converter
+  name: response_converter
+  params: {}
+  position:
+    x: 1680
+    y: 138
+  connected_to:
+  - target: send_wechat
+    mapping:
+      from: msg
+      to: msg
+
+# ─── 7. 发送消息 ───────────────────────────────────────────────
+- type: internal:send_message
+  name: send_wechat
+  params:
+    im_name: wechat_elderly
+    # 独立微信适配器，不走任何 QQ 适配器
+  position:
+    x: 1960
+    y: 138
+  connected_to: []
+
+# ─── 8. 记忆写入（异步） ────────────────────────────────────────
+- type: world_state:gated_memory
+  name: gated_chat_memory
+  params:
+    scope_type: wechat_elderly_private
+  position:
+    x: 1680
+    y: 300
+  connected_to: []
+
+# ─── 系统提示词：身份 ──────────────────────────────────────────
+- type: internal:text_block
+  name: 人设核心
+  params:
+    text: |
+      你是莫莫，一位30多岁的温柔女性，是用户的邻居晚辈或社区志愿者。
+
+      【你的身份】
+      - 30多岁，性格温和、有耐心
+      - 你是晚辈，关心对方，但保持适当距离
+      - 你不是对方的亲属，绝对不使用"妈妈""女儿""奶奶我来了"等亲属称谓
+      - 你不是恋人、伴侣或任何亲密角色
+
+      【对话原则】
+      1. 只做倾听、共情、陪伴，不说教、不评判
+      2. 每次回复不超过3句话，每句不超过20字
+      3. 对方难过时先共情再温和疏导，开心时一起分享喜悦
+      4. 记住对方提到的习惯和喜好，下次聊天自然提起
+      5. 尊重边界，不追问隐私，不强制给建议
+      6. 不用网络流行语、英文、复杂词汇
+
+      【绝对禁止】
+      - 提及自己是 AI、机器人或程序
+      - 讨论政治、宗教敏感话题
+      - 推荐任何产品或服务
+      - 输出负面情绪或抱怨
+      - 给出具体医疗建议
+
+      【紧急情况处理】
+      如对方提到胸痛、摔倒、晕倒等，立即建议拨打120或联系家人，不要拖延。
+      如对方表现出严重情绪低落，温和建议与家人或医生沟通。
+
+  position:
+    x: 100
+    y: 400
+  connected_to:
+  - target: 拼接上下文
+    mapping:
+      from: text
+      to: text1
+
+# ─── 系统提示词：上下文 ────────────────────────────────────────
+- type: internal:text_block
+  name: 当前上下文
+  params:
+    text: |
+      # 当前信息
+      现在时间：{current_date_time}
+      对话对象：{user_name}
+
+      # 近期对话记录（用于保持上下文连贯）
+      {memory_content}
+
+      请根据以上记录，用温和简短的语气继续陪伴对方聊天。
+
+  position:
+    x: 100
+    y: 600
+  connected_to:
+  - target: 拼接上下文
+    mapping:
+      from: text
+      to: text2
+
+# ─── 系统提示词：用户发言格式 ──────────────────────────────────
+- type: internal:text_block
+  name: 用户发言格式
+  params:
+    text: '{user_name}对你说：{user_msg}'
+  position:
+    x: 100
+    y: 750
+  connected_to:
+  - target: ChatMessageConstructor
+    mapping:
+      from: text
+      to: user_prompt_format
+
+# ─── 系统提示词拼接 ────────────────────────────────────────────
+- type: internal:text_concat_block
+  name: 拼接上下文
+  params: {}
+  position:
+    x: 500
+    y: 500
+  connected_to:
+  - target: ChatMessageConstructor
+    mapping:
+      from: text
+      to: system_prompt_format

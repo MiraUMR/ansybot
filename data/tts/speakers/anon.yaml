@@ -1,0 +1,13 @@
+id: anon
+display: 千早爱音
+# 后端：硅基流动 CosyVoice2。参考音频由 scripts/sf_tts.py make-ref 合成后上传，
+# 得到 voice_uri 后所有回复都用它，音色才不会每次漂。
+preset_voice: diana
+ref_instruct: 用十六岁女生的声音说，明亮清脆，语速偏快，带一点雀跃和小慌张，句尾轻轻上扬
+ref_text: 诶，真的假的？等一下，你再说一遍嘛。啊，我知道了我知道了。那就这样吧，先去吃饭，走啦走啦，别磨蹭啦。
+ref_speed: 1.12
+ref_gain: 0.0
+say_instruct: 语速偏快，明亮活泼，像女高中生在手机上讲话
+speed: 1.1
+gain: 0.0
+voice_uri: ""

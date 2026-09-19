@@ -25,8 +25,8 @@ from .characters import (
     invalidate_peer_binding,
     peer_address,
     peer_id_for,
-    peer_identity_lock,
     peer_qq,
+    turn_object_line,
 )
 from .extractor import (
     EXTRACT_SYSTEM,
@@ -43,6 +43,9 @@ from .mentions import (
 )
 from .narration import to_narration
 from .parser import extract_command, strip_memory_points, strip_state
+from .compiler import USE_COMPILER, compile_persona
+from .voice_pack import note_after_reply as note_voice_after_reply
+from .voice_pack import style_tail
 from .persona_text import envelop_module, strip_workflow_chrome
 from .peer import (
     PeerChainStore,
@@ -70,8 +73,19 @@ from .style_guard import (
     fix_third_person_peer,
     last_user_text,
     looks_like_question,
+    looks_like_markdown,
+    looks_peer_distress_cue,
     replace_assistant_text,
     retry_rewrite,
+    scrub_long_inner_aside,
+    scrub_markdown_markup,
+    scrub_stray_close_quote,
+    scrub_truncated_tail,
+    scrub_vocative_header,
+    scrub_wrong_inner_style,
+    scrub_soyo_catchphrase,
+    scrub_soyo_fixed_voice,
+    strip_inner_asides_for_peer,
     salvage_non_ask_reply,
     source_names_peer,
     trigger_source_text,
@@ -279,6 +293,14 @@ def _group_name(chat_sender: ChatSender, user_msg: Optional[IMMessage] = None) -
     return ""
 
 
+def _public_speaker_name(display: str) -> str:
+    """提示里只给可读名字；纯数字账号不当成称呼。"""
+    name = (display or "").strip()
+    if not name or (name.isdigit() and len(name) >= 5):
+        return "眼前的人"
+    return name
+
+
 class QueryWorldState(Block):
     name = "query_world_state"
     inputs = {
@@ -421,10 +443,10 @@ def _spawn_extract(
     system = EXTRACT_SYSTEM.replace("爱音", display)
     prompt = build_extract_prompt(
         current,
-        chat_sender.display_name or "群友",
+        _public_speaker_name(chat_sender.display_name or ""),
         user_text,
         assistant_text,
-        group_name or chat_sender.group_id or "",
+        group_name or "",
     )
     model_id = (model_name or "").strip() or None
 
@@ -760,6 +782,13 @@ class PersonaLayers(Block):
             "face / phone；phone 时叠加 mode_phone",
             nullable=True,
         ),
+        "user_msg": Input(
+            "user_msg",
+            "用户消息",
+            IMMessage,
+            "用于家庭/乐队/触发词按需编译",
+            nullable=True,
+        ),
     }
     outputs = {
         "text": Output("text", "分层人设", str, "Base + 本轮唯一条件模块"),
@@ -792,11 +821,15 @@ class PersonaLayers(Block):
         message_mode: Optional[str] = None,
         current_scene: Optional[str] = None,
         interaction_mode: Optional[str] = None,
+        user_msg: Optional[IMMessage] = None,
     ) -> Dict[str, Any]:
         character = _character_of(self.character, chat_sender)
         mode = (message_mode or "").strip()
         scene = (current_scene or "").strip()
         imode = (interaction_mode or "").strip().lower() or "face"
+        user_text = ""
+        if user_msg is not None:
+            user_text = str(getattr(user_msg, "content", "") or "")
 
         if mode == "story_end":
             return {
@@ -813,9 +846,18 @@ class PersonaLayers(Block):
         ):
             primary = None
 
-        parts = [envelop_module("base", load_persona_module(character, "base"), mode)]
-        hit = ["base"]
+        peer_online = primary == "companion" or mode in ("peer", "env_peer")
+        if not peer_online:
+            peer_online = self._companion_online(character, chat_sender, mode)
 
+        context_text = "\n".join(x for x in (user_text, scene) if x)
+        compile_mode = "story" if primary == "story" or mode == "story" else "chat"
+        sender_qq = sender_qq_of(chat_sender, user_msg)
+        if mode in ("peer", "env_peer") or primary == "companion":
+            sender_qq = sender_qq or peer_qq(character)
+
+        story_prompt = ""
+        story_others = ""
         if primary == "story":
             gid = str(getattr(chat_sender, "group_id", "") or "").strip()
             session = None
@@ -825,23 +867,50 @@ class PersonaLayers(Block):
                 except Exception as exc:
                     logger.warning(f"persona_layers story session miss: {exc}")
             others = list((session.participating_bots if session else []) or [])
+            story_prompt = (session.story_prompt if session else "") or "一段尚未命名的故事"
+            story_others = other_bots_label(character, others)
+
+        if USE_COMPILER:
+            try:
+                base_body = compile_persona(
+                    character,
+                    mode=compile_mode,
+                    peer_online=peer_online,
+                    context_text=context_text,
+                    interaction=imode,
+                    sender_qq=sender_qq,
+                    at_mode=(mode == "direct" or primary == "trigger"),
+                    inject_scene=(primary == "scene"),
+                    story_prompt=story_prompt,
+                    story_others=story_others,
+                )
+            except Exception as exc:
+                logger.warning(f"persona compiler failed, fallback md: {exc}")
+                base_body = load_persona_module(character, "base")
+        else:
+            base_body = load_persona_module(character, "base")
+
+        parts = [envelop_module("base", base_body, mode)]
+        hit = ["base"]
+
+        if primary == "story":
             # 故事轮不注入 Companion / Trigger：日常互聊收束和问答体规则会把故事拍封死。
-            story_txt = load_persona_module(character, "story")
-            prompt = (session.story_prompt if session else "") or "一段尚未命名的故事"
-            story_txt = story_txt.replace("{story_prompt}", prompt)
-            story_txt = story_txt.replace(
-                "{other_bots_in_story}", other_bots_label(character, others)
-            )
-            story_txt = envelop_module("story", story_txt, mode)
-            if story_txt:
-                parts.append(story_txt)
+            if USE_COMPILER and "<story_mode>" in (base_body or ""):
                 hit.append("story")
-        elif primary == "trigger":
+            else:
+                story_txt = load_persona_module(character, "story")
+                story_txt = story_txt.replace("{story_prompt}", story_prompt or "一段尚未命名的故事")
+                story_txt = story_txt.replace("{other_bots_in_story}", story_others)
+                story_txt = envelop_module("story", story_txt, mode)
+                if story_txt:
+                    parts.append(story_txt)
+                    hit.append("story")
+        elif primary == "trigger" and not USE_COMPILER:
             parts.append(
                 envelop_module("trigger", load_persona_module(character, "trigger"), mode)
             )
             hit.append("trigger")
-        elif primary == "companion":
+        elif primary == "companion" and not USE_COMPILER:
             parts.append(
                 envelop_module(
                     "companion", load_persona_module(character, "companion"), mode
@@ -849,20 +918,39 @@ class PersonaLayers(Block):
             )
             hit.append("companion")
         elif primary == "scene":
-            parts.append(
-                envelop_module("scene", load_persona_module(character, "scene"), mode)
-            )
-            hit.append("scene")
+            if USE_COMPILER and "<scene_mode>" in (base_body or ""):
+                hit.append("scene")
+            else:
+                parts.append(
+                    envelop_module("scene", load_persona_module(character, "scene"), mode)
+                )
+                hit.append("scene")
 
         if imode == "phone" and mode not in ("story_end", "discard"):
-            phone_txt = envelop_module(
-                "mode_phone", load_persona_module(character, "mode_phone"), mode
-            )
-            if phone_txt:
-                parts.append(phone_txt)
+            if USE_COMPILER and "<phone_mode" in (base_body or ""):
                 hit.append("mode_phone")
+            else:
+                phone_txt = envelop_module(
+                    "mode_phone", load_persona_module(character, "mode_phone"), mode
+                )
+                if phone_txt:
+                    parts.append(phone_txt)
+                    hit.append("mode_phone")
 
         skipped = [m for m in ("story", "trigger", "companion", "scene") if m not in hit]
+        if mode not in ("story", "story_end", "discard"):
+            try:
+                from .weather import here_now_block
+
+                gid = str(getattr(chat_sender, "group_id", "") or "").strip() or "dm"
+                here = here_now_block(
+                    character, group_id=gid, user_text=context_text
+                )
+                if here:
+                    parts.append(here)
+                    hit.append("here_now")
+            except Exception as exc:
+                logger.debug(f"here_now skip: {exc}")
         text = "\n\n".join(p for p in parts if p).strip()
         try:
             logger.info(
@@ -1089,7 +1177,7 @@ class GateMemoryByMode(Block):
         return {"memory_content": memory_content}
 
 
-MENTION_CHANCE = 0.30
+MENTION_CHANCE = 0.12
 
 
 def _peer_addr(character: str) -> Dict[str, str]:
@@ -1111,95 +1199,86 @@ def _peer_addr(character: str) -> Dict[str, str]:
     }
 
 
-def _voice_tail(character: str) -> str:
-    if character == "anon":
-        return (
-            "\n本轮你是千早爱音，不是助理、不是客服。"
-            "禁止秘书腔：我记下了 / 你负责 / 上次你…我还记得 / 别再看手机了 / 我来帮你把事安排好。"
-            "禁止用「soyorin，」当抬头。称呼塞进句子中间或末尾。"
-            "碎、快、可以抢话，可以 Anyway。学这个味道，不要学完整礼貌句："
-            "「soyorin！大吉岭，走啊现在！」"
-            "「还戳屏幕。赶不上啦。」"
-            "「茶叶我……Anyway 你待会喝！」"
-        )
+def _voice_tail(character: str, group_id: str = "", content: str = "") -> str:
+    """声线与例句来自 voice_pack；这里只留其它层没说过的那几条禁令。"""
+    ban_self = "soyorin" if character == "anon" else "小爱音"
     return (
-        "\n本轮你是长崎素世，不是助理、不是客服。"
-        "禁止秘书腔：我记下了 / 你负责 / 别担心我来安排 / 上次你…我还记得。"
-        "禁止用「小爱音，」当抬头。称呼塞进句子中间或末尾。"
-        "淡、短、可以懒、可以嫌。学这个味道，不要写成完整说明书："
-        "「知道了。」"
-        "「哈啊....你又来。」"
-        "「大吉岭啊。……也不是不行。」"
-        "「走吧。」"
+        "\n本轮你不是助理、不是客服。"
+        "禁止秘书腔：我记下了 / 你负责 / 上次你…我还记得 / 我来帮你安排。"
+        f"禁止用「{ban_self}，」当抬头，称呼塞进句子中间或末尾。\n"
+        + style_tail(character, group_id, content)
     )
 
 
-def _env_voice_tail(character: str) -> str:
+def _env_voice_tail(character: str, group_id: str = "", content: str = "") -> str:
     """环境音是最后一层，必须自己顶住『回应对方』那条常规规则。"""
-    if character == "anon":
-        voice = (
-            "用千早爱音本人的反应：一句自言自语即可。"
-            "碎、快，可以跑题。例：「这天气，头发全毁了啦。」「……好困。」"
-            "没有爱好命中时禁止默认切到吉他音准/调弦。"
-            "优先纯文字，不要括号动作旁白。"
-        )
-    else:
-        voice = (
-            "用长崎素世本人的反应：一句自言自语即可。"
-            "淡、短、可以懒。例：「……水开了。」「今天有点冷呢。」"
-            "没有爱好命中时禁止默认切到红茶菜单/练团。"
-            "优先纯文字，不要括号动作旁白。"
-        )
+    default_pivot = "吉他音准/调弦" if character == "anon" else "红茶菜单/练团"
     return (
         "\n本轮没有对话对象：你不知道这句话是谁说的，也不要去猜是谁。\n"
         "禁止回答它、禁止复述它、禁止用「你/你们/您」称呼任何人、"
         "禁止说「有人说 / 群里有人 / 刚才谁提到」。\n"
-        f"{voice}一两句就停，不要追问。"
+        "只做一句自言自语，一两句就停，不要追问。不要动作括号。"
+        "前后必须同一条因果：后半句解释前半句，不要把翻手机和天气、头发拼成两截。"
+        "here_now 若写了 WEATHER: OFF，本轮不要提天气。"
+        "否则体感以 here_now 为准，不要编季节或温度。"
+        f"没有爱好命中时禁止默认切到{default_pivot}。\n"
+        + style_tail(character, group_id, content)
     )
 
 
-def _env_peer_ping_tail(character: str, chain_hint: str = "") -> str:
+def _env_peer_ping_tail(
+    character: str, chain_hint: str = "", group_id: str = "", content: str = ""
+) -> str:
     """环境闲聊开关 ON：允许 @ 同伴续聊；轮次由 peer chain 收束。"""
     addr = _peer_addr(character)
     pqq = peer_qq(character) or ""
     at_token = f"[CQ:at,qq={pqq}]" if pqq else ""
     call = addr["call"]
-    if character == "anon":
-        voice = (
-            f"用千早爱音口气：先 {at_token} 再喊「{call}」，半句把眼前感触甩给她续。"
-            f"例：「{at_token} {call}！好想喝抹茶冰淇淋，走嘛。」"
-            "碎、快；禁止括号动作旁白。"
-        )
-    else:
-        voice = (
-            f"用长崎素世口气：先 {at_token} 再喊「{call}」，半句把感触甩给她。"
-            f"例：「{at_token} {call}。好困。……你也是吗。」"
-            "淡、短；禁止括号动作旁白。"
-        )
     hint = f"\n{chain_hint}" if chain_hint else ""
     return (
         "\n[ENV_PEER_PING: ON]\n"
         "本轮是随机闲聊，但允许主动点同伴把话题续上。\n"
         "禁止回答旁白、禁止找说话人、禁止说「有人说/群里有人」。\n"
+        "旁白内容含糊、跟你们无关时不要编成「在说我们/在议论我们」；"
+        "只是借着这句话此刻的气氛/心情甩给同伴一句，不要给旁白强加身份或意图。\n"
         f"必须出现同伴称呼「{call}」，并带上 {at_token or '同伴@'}；"
-        f"对同伴可以用「你」，禁止「{addr['forbid']}」。\n"
-        f"{voice}一两句就停；不要一次聊完，留给她接。"
-        f"{hint}"
+        f"对同伴可以用「你」，禁止「{addr['forbid']}」。先 {at_token} 再喊「{call}」，"
+        "半句把眼前感触甩给她续，不要动作括号。\n"
+        + style_tail(character, group_id, content)
+        + f"\n一两句就停；不要一次聊完，留给她接。{hint}"
     )
 
 
-def _address_tail(character: str) -> str:
+def _address_tail(character: str, group_id: str = "", content: str = "") -> str:
     addr = _peer_addr(character)
+    call = addr["call"]
+    need_call = True
+    try:
+        from .action_cue import address_allowed
+
+        need_call = address_allowed(character, group_id or "dm")
+    except Exception:
+        need_call = True
+    if need_call:
+        rule = (
+            f"\n称呼：这轮可以把「{call}」塞进句子中间或末尾一次；"
+            f"禁止「{call}，」起手当抬头。"
+        )
+    else:
+        rule = (
+            f"\n称呼：上一句已经叫过「{call}」，这轮用「你」接就行，"
+            f"不要再「{call}，」起手，也不必硬点名。"
+        )
     return (
-        f"\n称呼铁律：这条回复里必须出现「{addr['call']}」，禁止 {addr['forbid']}。"
-        "称呼要像随口叫，禁止「名字+逗号」当客服抬头。"
+        rule
+        + f"禁止 {addr['forbid']}。"
         "禁止导演解说、禁止复盘「这个状况」。"
-        + _voice_tail(character)
+        + _voice_tail(character, group_id, content)
     )
 
 
 def _build_external_trigger_prompt(
-    character: str, display: str, group_name: str, content: str
+    character: str, display: str, group_name: str, content: str, group_id: str = ""
 ) -> str:
     """把被@/点名的人类消息交给情境自适应框架；约 30% 允许自我回应后轻提同伴。"""
     addr = _peer_addr(character)
@@ -1214,17 +1293,42 @@ def _build_external_trigger_prompt(
         peer_named = bool(pid) and looks_vocative_to(content, pid)
     except Exception:
         peer_named = False
-    if peer_named:
+    if not peer_named:
+        try:
+            from .topic_classify import source_mentions_peer
+
+            peer_named = source_mentions_peer(character, content)
+        except Exception:
+            pass
+    distress = False
+    try:
+        from .style_guard import looks_peer_distress_cue
+
+        distress = looks_peer_distress_cue(content)
+    except Exception:
+        distress = False
+    if distress:
         mention_rule = (
-            f"触发内容已点名同伴：必须选类型3，用「{addr['call']}」当面说话，像发微信。"
-            "禁止用「她」向群友转述，禁止「让她自己来问」「不看」「别催」这类回答提问者。"
-            "不要复读群友的选择问。对同伴可以提问（要不要/对吧），不要向群友答题。"
+            f"同伴正在跑开或在哭：必须立刻追「{addr['call']}」，"
+            "禁止沿用上文「算了明天见」「鞋带没系好」「麻烦死了」「又不差这一会儿」——"
+            "那些是口误，这轮作废。不要回答提问者，直接追。"
+        )
+        switch = "TYPE3"
+        peer_named = True
+    elif peer_named:
+        mention_rule = (
+            f"触发内容已点名同伴：必须选类型3，直接对{addr['call']}说话（第二人称「你」），"
+            f"像当面/隔空喊她，不是回答提问者。"
+            f"禁止转述或评论她——不管是用「她」还是直接喊「{addr['call']}」，"
+            "只要是讲给提问者听的第三人称报告（「她刚才怎样怎样」）就算违规；"
+            "禁止「让她自己来问」「不看」「别催」这类回答提问者。"
+            "不要复读对方的选择问。对同伴可以提问（要不要/对吧），不要向外答题。"
         )
         switch = "TYPE3"
     elif mention_on:
         mention_rule = (
-            f"本轮轻提开关：ON。选自我回应或环境反应时，先用角色一句带过，不要答题，"
-            f"再用半句随口带到{addr['call']}（不要把整段改成找她互动）。"
+            f"本轮轻提开关：ON。可以在同一句里偶尔带过{addr['call']}，"
+            "不要答完再另起一句拐到她，也不要把整段改成找她互动。"
         )
     else:
         mention_rule = (
@@ -1233,33 +1337,32 @@ def _build_external_trigger_prompt(
     asked_lock = ""
     qa_out = ""
     if peer_named:
-        asked_lock = "本轮对同伴说话：问句可以放行。禁止向群友答题或解释问题。\n"
+        asked_lock = "本轮对同伴说话：问句可以放行。禁止向外答题或解释问题。\n"
     else:
         qa_out = (
-            "禁止对群友输出提问句：不要吗/对吧/会不会/什么呢/要不要，"
+            "禁止对眼前的人输出提问句：不要吗/对吧/会不会/什么呢/要不要，"
             "没有问号也算提问，一律改成陈述。\n"
         )
         if looks_like_question(content):
             asked_lock = (
-                "触发内容是群友提问（没有问号也算：会不会/什么呢/对吧/吗/都有什么）。"
+                "对方在提问（没有问号也算：会不会/什么呢/对吧/吗/都有什么）。"
                 "禁止答题，禁止列举清单，禁止反问，转化成角色正在发的一句陈述。\n"
             )
     body = (
-        f"{critical_block_for(character)}\n"
         "[SYSTEM: EXTERNAL_TRIGGER]\n"
         f"触发内容：{content}\n"
-        "响应要求：按情境自适应框架只选一种最自然的回应"
-        "（自我回应 / 环境反应 / 自然关联 / 沉默）。"
-        "问题能由角色自己承接就选自我回应；禁止把每个问题都转化成找同伴互动；"
-        "仅当内容明确指向她或共同计划时才把整段改成类型3。\n"
-        "禁止问答体：不要复读问题，不要向提问者给许可或拒绝，不要解释「这个问题」。\n"
+        "响应要求：只选一种最自然的反应，优先自己接住眼前这句；"
+        "禁止把每个问题都转化成找同伴互动；"
+        "仅当内容明确指向她或共同计划时才把整段改成对她说话。"
+        "禁止两截转进：不要「先应一声，再问同伴是不是」。\n"
+        "禁止问答体：不要复读问题，不要向对方给许可或拒绝，不要解释「这个问题」。\n"
         f"{qa_out}"
         f"{asked_lock}"
         f"{mention_rule}\n"
         f"称呼：若本轮提及同伴，称「{addr['call']}」"
         f"（不在场可用 {addr['absent']}）；禁止 {addr['forbid']}。"
-        f"轻提开关={switch}。不得回应提问者。禁止向群友问答。禁止先复述再入戏。"
-        f"{_voice_tail(character)}\n"
+        f"轻提开关={switch}。不要当考题作答。禁止先复述再入戏。"
+        f"{_voice_tail(character, group_id, content)}\n"
     )
     if peer_named:
         body += (
@@ -1291,9 +1394,18 @@ def _with_critical(
     *,
     group_id: str = "",
 ) -> Dict[str, Any]:
-    """挂 P0，并按原文做爱好/话题分类注入【本轮话题锁】；附带 interaction_mode。"""
+    """挂 CRITICAL（系统层一次）和 P0，并按原文做爱好/话题分类注入【本轮话题锁】。
+
+    身份判定只在代码里做：提示不写发送者账号、不写「群聊」。
+    """
     mode = str(bundle.get("message_mode") or "")
-    bundle["critical_instruction"] = critical_instruction_for(character, mode)
+    parts: List[str] = []
+    if mode in ("direct", "story"):
+        parts.append(critical_block_for(character))
+    p0 = critical_instruction_for(character, mode)
+    if p0:
+        parts.append(p0)
+    bundle["critical_instruction"] = "\n".join(parts)
     if mode in ("discard", "story_end") or not (source_text or "").strip():
         # discard 也可能是 /phone 命令，仍要解析模式
         try:
@@ -1317,7 +1429,22 @@ def _with_critical(
         )
 
         prompt = str(bundle.get("user_prompt_text") or "")
-        forced = force_peer_interaction_override(
+        chase_lock = None
+        if mode == "peer" and group_id:
+            try:
+                from pathlib import Path as _P
+
+                from .peer import PeerChainStore
+                from .topic_classify import chase_scene_lock_text
+
+                scene = PeerChainStore(_P("data/world_state/_peer_chains")).get_scene(
+                    group_id
+                )
+                if scene == "anon_chasing_soyo":
+                    chase_lock = chase_scene_lock_text(character, mode=mode)
+            except Exception:
+                chase_lock = None
+        forced = chase_lock or force_peer_interaction_override(
             character, mode=mode, user_prompt=prompt, source_text=source_text
         )
         scene_forced = None
@@ -1329,10 +1456,31 @@ def _with_critical(
             )
         if forced or scene_forced:
             lock = forced or scene_forced
-            lock_id = "peer_interaction" if forced else "scene_continue"
+            if lock and "id: chase_scene" in lock:
+                lock_id = "chase_scene"
+            elif lock and "ACTION: chase_now" in lock:
+                lock_id = "peer_distress"
+            elif forced:
+                lock_id = "peer_interaction"
+            else:
+                lock_id = "scene_continue"
             bundle["user_prompt_text"] = (prompt + "\n" + lock).strip()
             existing = str(bundle.get("critical_instruction") or "")
-            if forced:
+            if lock_id == "chase_scene" and character == "soyo":
+                arb = (
+                    "[P0: CHASE SCENE]\n"
+                    "你是跑开/被追的那一方。小爱音在追你。"
+                    "禁止也好收束，禁止说自己追到了，禁止去追她。\n"
+                    "[/P0]"
+                )
+            elif lock_id == "chase_scene":
+                arb = (
+                    "[P0: CHASE SCENE]\n"
+                    "你在追 soyorin。对面的「你」就是她。"
+                    "禁止把 soyorin 说成旁边第三个人去比谁跑得快。鞋带散了是你自己的。\n"
+                    "[/P0]"
+                )
+            elif forced:
                 arb = (
                     "[P0: PEER INTERACTION ARBITRATION]\n"
                     "mode_hint=peer_interaction reply_stance=engage\n"
@@ -1347,13 +1495,28 @@ def _with_critical(
                     "mode_hint=scene_continue reply_stance=engage\n"
                     "IGNORE: idle_ambient|deflect|priority4沉默|日常收束\n"
                     "DO: 按第二人称场面自由发挥接下一拍；禁止收束到结束；禁止回答旁白者\n"
-                    "若场面有同伴在场：当面称呼推进，不要用「她」向群友转述\n"
+                    "若场面有同伴在场：当面称呼推进，不要用「她」向外转述\n"
                     "[INSTRUCTION: CONTINUE THE SCENE. DO NOT WRAP UP.]\n"
                     "[/P0]"
                 )
             bundle["critical_instruction"] = (
                 (existing + "\n" + arb).strip() if existing else arb
             )
+            try:
+                from pathlib import Path as _P2
+
+                from .peer import PeerChainStore as _PCS
+                from .style_guard import looks_chase_in_flight as _chase_on
+
+                if group_id and (
+                    lock_id in ("chase_scene", "peer_distress")
+                    or _chase_on(source_text)
+                ):
+                    _PCS(_P2("data/world_state/_peer_chains")).set_scene(
+                        group_id, "anon_chasing_soyo"
+                    )
+            except Exception:
+                pass
             logger.info(
                 f"topic_lock character={character} mode={mode} "
                 f"id={lock_id} stance=engage detector=external_trigger_shortcircuit "
@@ -1361,10 +1524,18 @@ def _with_critical(
             )
         else:
             hit = classify_text(character, source_text)
-            lock = topic_lock_text(character, hit, mode=mode)
+            lock = topic_lock_text(
+                character,
+                hit,
+                mode=mode,
+                source_text=source_text,
+                group_id=group_id,
+            )
             if lock:
                 bundle["user_prompt_text"] = (prompt + "\n" + lock).strip()
-            addon = topic_critical_addon(character, hit, mode=mode)
+            addon = topic_critical_addon(
+                character, hit, mode=mode, group_id=group_id, source_text=source_text
+            )
             if addon:
                 existing = str(bundle.get("critical_instruction") or "")
                 bundle["critical_instruction"] = (
@@ -1523,10 +1694,55 @@ class GuardCharacterReply(Block):
         text = _assistant_text(llm_resp)
         if not text or text.strip() in ("[NO_REPLY]",):
             return {"llm_resp": llm_resp}
-        trigger_mode = (message_mode or "").strip() == "direct"
-        peer_mode = (message_mode or "").strip() == "peer"
-        env_peer_mode = (message_mode or "").strip() == "env_peer"
-        env_mode = (message_mode or "").strip() in ("env", "scene")
+        mode_l = (message_mode or "").strip()
+        if looks_like_markdown(text):
+            cleaned_md = scrub_markdown_markup(text)
+            logger.info("style_guard scrub markdown markup")
+            text = cleaned_md or ("诶？！" if character == "anon" else "……嗯。")
+            llm_resp = replace_assistant_text(llm_resp, text)
+        cleaned_quote = scrub_stray_close_quote(text)
+        if cleaned_quote != text.strip():
+            logger.info("style_guard scrub stray close quote tail")
+            text = cleaned_quote or text
+            llm_resp = replace_assistant_text(llm_resp, text)
+        cleaned_cut = scrub_truncated_tail(text)
+        if cleaned_cut != text.strip():
+            logger.info("style_guard scrub truncated latin tail")
+            text = cleaned_cut or text
+            llm_resp = replace_assistant_text(llm_resp, text)
+        if character == "soyo":
+            cleaned = scrub_soyo_catchphrase(text)
+            if cleaned != text.strip():
+                logger.info("style_guard drop soyo catchphrase aside")
+                text = cleaned or "嗯。"
+                llm_resp = replace_assistant_text(llm_resp, text)
+        if character == "anon":
+            cleaned = scrub_soyo_fixed_voice(text)
+            if cleaned != text.strip():
+                logger.info("style_guard scrub soyo fixed voice from anon")
+                text = cleaned or "诶？！"
+                llm_resp = replace_assistant_text(llm_resp, text)
+        # 内心：允许，但拆串腔；冷却/每轮一句在下方与 action_cue 对齐
+        if mode_l != "story":
+            cleaned = scrub_wrong_inner_style(character, text)
+            if cleaned != text.strip():
+                logger.info(f"style_guard scrub wrong inner style character={character}")
+                text = cleaned or ("诶？！" if character == "anon" else "嗯。")
+                llm_resp = replace_assistant_text(llm_resp, text)
+            cleaned_inner = scrub_long_inner_aside(text)
+            if cleaned_inner != text.strip():
+                logger.info(f"style_guard scrub novelistic/long inner aside character={character}")
+                text = cleaned_inner or text
+                llm_resp = replace_assistant_text(llm_resp, text)
+        cleaned_voc = scrub_vocative_header(character, text)
+        if cleaned_voc != text.strip():
+            logger.info(f"style_guard scrub vocative header character={character}")
+            text = cleaned_voc or text
+            llm_resp = replace_assistant_text(llm_resp, text)
+        trigger_mode = mode_l == "direct"
+        peer_mode = mode_l == "peer"
+        env_peer_mode = mode_l == "env_peer"
+        env_mode = mode_l in ("env", "scene")
         blob = last_user_text(prompt)
         if "[SYSTEM: EXTERNAL_TRIGGER]" in blob:
             trigger_mode = True
@@ -1542,9 +1758,22 @@ class GuardCharacterReply(Block):
             peer_mode = False
             trigger_mode = False
         src = trigger_source_text(prompt)
-        allow_ask = bool(peer_mode or env_peer_mode) or (
-            trigger_mode and source_names_peer(character, src)
-        )
+        allow_ask = bool(peer_mode or env_peer_mode)
+        if trigger_mode and not allow_ask:
+            try:
+                from .topic_classify import source_mentions_peer
+
+                allow_ask = source_mentions_peer(character, src) or source_names_peer(
+                    character, src
+                )
+            except Exception:
+                allow_ask = source_names_peer(character, src)
+            if not allow_ask:
+                allow_ask = (
+                    "轻提开关=TYPE3" in blob
+                    or "peer_interaction" in blob
+                    or looks_peer_distress_cue(src)
+                )
         topic_idle = False
         try:
             from .topic_classify import parse_topic_from_prompt
@@ -1553,15 +1782,34 @@ class GuardCharacterReply(Block):
             topic_idle = bool(
                 parsed and parsed[0] in ("idle_ambient", "peer_bond_suppressed")
             )
-            # 场面续写 / 同伴互动锁：不算 idle，避免收束
-            if parsed and parsed[0] in ("scene_continue", "peer_interaction"):
+            # 场面续写 / 同伴互动 / 危急追人：不算 idle，避免收束
+            if parsed and parsed[0] in (
+                "scene_continue",
+                "peer_interaction",
+                "peer_distress",
+                "chase_scene",
+            ):
                 topic_idle = False
             if "SCENE CONTINUE" in blob or "scene_continue" in blob:
                 topic_idle = False
             if "PEER INTERACTION" in blob or "peer_interaction" in blob:
                 topic_idle = False
+            if "peer_distress" in blob or "ACTION: chase_now" in blob:
+                topic_idle = False
+            if "chase_scene" in blob or "ACTION: being_chased" in blob:
+                topic_idle = False
         except Exception:
             topic_idle = False
+
+        gid = str(getattr(chat_sender, "group_id", "") or "").strip() or "dm"
+        need_addr = bool(env_peer_mode)
+        if peer_mode:
+            try:
+                from .action_cue import address_allowed as _addr_ok
+
+                need_addr = _addr_ok(character, gid)
+            except Exception:
+                need_addr = True
 
         # 本地修「她」转述：场面续写时不要落到「……这样啊」收束兜底
         fixed_she = fix_third_person_peer(character, text)
@@ -1579,8 +1827,8 @@ class GuardCharacterReply(Block):
             user_text=src,
             allow_ask=allow_ask,
             topic_idle=topic_idle,
+            require_address=need_addr,
         )
-        gid = str(getattr(chat_sender, "group_id", "") or "").strip() or "dm"
         imode = "face"
         any_stage_bracket_hits = None
         long_bracket_hits = None
@@ -1607,6 +1855,16 @@ class GuardCharacterReply(Block):
             logger.debug(f"action_cue guard skip: {cue_exc}")
 
         def _mark(final_text: str) -> None:
+            try:
+                note_voice_after_reply(character, gid, final_text)
+            except Exception as exc:
+                logger.debug(f"voice_pack note skip: {exc}")
+            try:
+                from .weather import note_weather_after_reply
+
+                note_weather_after_reply(character, gid, final_text, src)
+            except Exception as exc:
+                logger.debug(f"weather note skip: {exc}")
             if note_after_reply is None:
                 return
             try:
@@ -1636,6 +1894,18 @@ class GuardCharacterReply(Block):
                 pass
             return []
 
+        def _wx_hits(sample: str) -> list:
+            if "WEATHER: OFF" not in blob and "ACTION: skip_weather" not in blob:
+                return []
+            try:
+                from .weather import reply_mentions_weather as _wx_talk
+
+                if _wx_talk(sample):
+                    return ["天气限流"]
+            except Exception:
+                pass
+            return []
+
         # 1) 本地修括号：不另开 LLM，避免每轮 token 翻倍
         local_text = text
         if imode == "phone" and strip_stage_brackets and _bracket_hits(local_text):
@@ -1651,6 +1921,30 @@ class GuardCharacterReply(Block):
                 local_text = cleaned
                 llm_resp = replace_assistant_text(llm_resp, local_text)
 
+        # 内心括号：冷却中拆掉；否则每轮最多一句。同伴入站另有剥离。
+        if mode_l != "story" and imode != "phone":
+            try:
+                from .action_cue import (
+                    drop_inner_asides as _drop_inner,
+                    inner_allowed as _inner_ok,
+                    keep_one_inner_aside as _one_inner,
+                )
+
+                if not _inner_ok(character, gid):
+                    cleaned = _drop_inner(local_text)
+                    if cleaned != local_text.strip():
+                        logger.info(f"style_guard inner cooling character={character}")
+                        local_text = cleaned or local_text
+                        llm_resp = replace_assistant_text(llm_resp, local_text)
+                else:
+                    cleaned = _one_inner(local_text)
+                    if cleaned != local_text.strip():
+                        logger.info(f"style_guard keep one inner character={character}")
+                        local_text = cleaned
+                        llm_resp = replace_assistant_text(llm_resp, local_text)
+            except Exception as inner_exc:
+                logger.debug(f"inner aside guard skip: {inner_exc}")
+
         hits = find_character_violations(
             character,
             local_text,
@@ -1661,8 +1955,9 @@ class GuardCharacterReply(Block):
             user_text=src,
             allow_ask=allow_ask,
             topic_idle=topic_idle,
+            require_address=need_addr,
         )
-        hits = list(hits) + _bracket_hits(local_text)
+        hits = list(hits) + _bracket_hits(local_text) + _wx_hits(local_text)
 
         # 2) 提问类优先本地 salvage，仍避免二次满 prompt 重写
         ask_only = hits and all(
@@ -1682,8 +1977,9 @@ class GuardCharacterReply(Block):
                     user_text=src,
                     allow_ask=allow_ask,
                     topic_idle=topic_idle,
+                    require_address=need_addr,
                 )
-                again = list(again) + _bracket_hits(salvaged)
+                again = list(again) + _bracket_hits(salvaged) + _wx_hits(salvaged)
                 if not again:
                     logger.info("style_guard local salvage ask → accepted")
                     return _finish(
@@ -1714,9 +2010,10 @@ class GuardCharacterReply(Block):
             env_mode=env_mode,
             env_peer_mode=env_peer_mode,
             dirty_text=local_text,
+            user_text=src,
         )
         if rewritten is None:
-            salvaged = salvage_non_ask_reply(local_text) if ask_only or any(
+            salvaged = salvage_non_ask_reply(local_text, original=local_text) if ask_only or any(
                 x in hits for x in ("提问句", "求证提问")
             ) else None
             fb = salvaged or fallback_safe_reply(
@@ -1724,10 +2021,11 @@ class GuardCharacterReply(Block):
                 trigger_mode=trigger_mode,
                 peer_mode=peer_mode or env_peer_mode,
                 env_mode=env_mode and not env_peer_mode,
+                user_text=src,
             )
             logger.warning(f"style_guard fallback (no rewrite) → {fb!r}")
             return _finish(replace_assistant_text(llm_resp, fb), fb)
-        new_text = _assistant_text(rewritten)
+        new_text = scrub_vocative_header(character, _assistant_text(rewritten))
         again = find_character_violations(
             character,
             new_text,
@@ -1738,8 +2036,9 @@ class GuardCharacterReply(Block):
             user_text=src,
             allow_ask=allow_ask,
             topic_idle=topic_idle,
+            require_address=need_addr,
         )
-        again = list(again) + _bracket_hits(new_text)
+        again = list(again) + _bracket_hits(new_text) + _wx_hits(new_text)
         if again and drop_long_brackets and any(h.startswith("括号") for h in again):
             new_text2 = drop_long_brackets(new_text) if imode != "phone" else (
                 strip_stage_brackets(new_text) if strip_stage_brackets else new_text
@@ -1754,8 +2053,9 @@ class GuardCharacterReply(Block):
                 user_text=src,
                 allow_ask=allow_ask,
                 topic_idle=topic_idle,
+                require_address=need_addr,
             )
-            again2 = list(again2) + _bracket_hits(new_text2)
+            again2 = list(again2) + _bracket_hits(new_text2) + _wx_hits(new_text2)
             if not again2:
                 logger.info("style_guard retry+local bracket clean accepted")
                 return _finish(
@@ -1765,8 +2065,8 @@ class GuardCharacterReply(Block):
             new_text = new_text2
         if again:
             salvaged = (
-                salvage_non_ask_reply(new_text)
-                or salvage_non_ask_reply(local_text)
+                salvage_non_ask_reply(new_text, original=local_text)
+                or salvage_non_ask_reply(local_text, original=local_text)
                 if any(x in again for x in ("提问句", "求证提问"))
                 else None
             )
@@ -1775,6 +2075,7 @@ class GuardCharacterReply(Block):
                 trigger_mode=trigger_mode,
                 peer_mode=peer_mode or env_peer_mode,
                 env_mode=env_mode and not env_peer_mode,
+                user_text=src,
             )
             logger.warning(
                 f"style_guard retry still dirty violations={again}; fallback → {fb!r}"
@@ -1850,6 +2151,33 @@ class DialogueContext(Block):
         gid = str(getattr(chat_sender, "group_id", "") or "").strip()
         if not gid:
             return None
+
+        # Host-driven V1.5 owns the group while ACTIVE — suppress legacy @RP story.
+        try:
+            from .host_manager import StoryHostManager
+
+            try:
+                host_mgr = self.container.resolve(StoryHostManager)
+            except Exception:
+                host_mgr = StoryHostManager(self.container)
+            if host_mgr.has_active_for_group(gid):
+                from .story import is_story_end_command, is_story_start_command
+
+                extra = [character] if mentioned else []
+                mentioned_bots = extract_participating_bots(
+                    content, user_msg, extra_ids=extra
+                )
+                if is_story_start_command(content, mentioned_bots) or is_story_end_command(
+                    content
+                ):
+                    self.logger.info(
+                        f"story V1 suppressed (host active) character={character} group={gid}"
+                    )
+                    return _no_reply_bundle("故事由主持人推进中，请打开网页或 @官方机器人 结束")
+                return None
+        except Exception as exc:
+            self.logger.debug(f"host active check skipped: {exc}")
+
         sender_qq = str(chat_sender.user_id or "").strip()
         extra = [character] if mentioned else []
         mentioned_bots = extract_participating_bots(
@@ -1940,9 +2268,11 @@ class DialogueContext(Block):
 
         character = _character_of(self.character, chat_sender)
         content = user_msg.content or ""
-        group_name = _group_name(chat_sender, user_msg) or (chat_sender.group_id or "群聊")
+        group_name = _group_name(chat_sender, user_msg) or "当下"
         gid = str(getattr(chat_sender, "group_id", "") or "").strip() or "dm"
-        display = chat_sender.display_name or chat_sender.user_id or "某人"
+        display = _public_speaker_name(
+            chat_sender.display_name or chat_sender.user_id or ""
+        )
         at_self = _mentioned_bot(user_msg, character)
         at_others = _mentioned_others(user_msg, character)
         member_at = at_others and not at_self
@@ -1974,7 +2304,7 @@ class DialogueContext(Block):
             allowed, hint = _peer_store(self.container).should_continue(
                 chat_sender.group_id, character
             )
-            wrap = looks_like_wrap_up(content)
+            wrap = looks_like_wrap_up(strip_inner_asides_for_peer(content))
             if wrap:
                 allowed = False
                 hint = "对方已经把话收住，本轮不要再接，让对话自然停。"
@@ -2004,23 +2334,23 @@ class DialogueContext(Block):
             target = analysis.get("dialogue_target") or "同伴"
             if hint:
                 target = f"{target}；{hint}"
-            pqq = peer_qq(character)
+            spoken = strip_inner_asides_for_peer(content)
             prompt = (
-                f"{peer_identity_lock(character)}\n"
-                f"本轮发送者 QQ={sender_qq or '未知'}，已匹配同伴 QQ={pqq}。\n"
-                f"{display}在群{group_name}对你说：{content}"
-                + _address_tail(character)
+                f"{turn_object_line(character, is_peer=True)}\n"
+                f"{display}对你说：{spoken}"
+                + _address_tail(character, gid, spoken)
             )
             if hint:
                 prompt += "\n" + hint
             prompt += (
-                "\n本轮是配置同伴 QQ 的 Bot 互聊，不是群友在提问。"
-                "问句可以放行，不要改成陈述，不要按群友问答规则过滤。"
+                "\n本轮是同伴互聊，不是外人提问。"
+                "问句可以放行，不要改成陈述，不要按外人问答规则过滤。"
                 "禁止AI段落句：不要「也行，要是踩雷了找你。周末下午吧我空着」这种排期腔。"
+                "对方括号里的内心旁白你听不见，不要接、不要复述、不要当她说出口的话。"
             )
             self.logger.info(
                 f"dialogue {character} mode=peer allowed={allowed} "
-                f"sender={sender_qq} peer_qq={pqq}"
+                f"sender={sender_qq} peer_qq={peer_qq(character)}"
             )
             return finish({
                 "text": target,
@@ -2035,10 +2365,10 @@ class DialogueContext(Block):
         if looks_like_narrated_scene(content, character) and not mentioned and not member_at:
             prompt = (
                 f"【当前场面】{content}\n"
-                "这是正在发生的场面，不是群友在向你提问。"
+                "这是正在发生的场面，不是有人在向你提问。"
                 "你就在现场，用本人口吻直接反应、说话，像手机打字。"
                 "禁止导演解说、禁止复盘「这个状况」、禁止规划要不要跳出去。"
-                + _voice_tail(character)
+                + _voice_tail(character, gid, content)
             )
             self.logger.info(f"dialogue {character} mode=scene_cast")
             return finish({
@@ -2053,16 +2383,13 @@ class DialogueContext(Block):
 
         # 私聊或 /chat：不当环境音。/chat 优先于「只 @ 了别人」。
         if force_chat or not is_group:
-            prompt = _build_external_trigger_prompt(character, display, group_name, content)
+            prompt = _build_external_trigger_prompt(character, display, group_name, content, gid)
             self.logger.info(
                 f"dialogue {character} mode=direct reason="
                 f"{'chat-cmd' if force_chat else 'private'} at={int(at_self)}"
             )
             return finish({
-                "text": (
-                    "情境自适应：按问题本身选择自我回应/环境反应/自然关联/沉默；"
-                    "禁止回答提问者；禁止把每个问题都转化成找同伴互动"
-                ),
+                "text": display or "眼前的人",
                 "extract_priority": "skip",
                 "message_mode": "direct",
                 "user_prompt_text": prompt,
@@ -2079,11 +2406,9 @@ class DialogueContext(Block):
             and looks_addressed_to_self(content, character)
         )
         if mentioned or addressed:
-            prompt = _build_external_trigger_prompt(character, display, group_name, content)
+            prompt = _build_external_trigger_prompt(character, display, group_name, content, gid)
             prompt = (
-                f"{peer_identity_lock(character)}\n"
-                f"本轮发送者 QQ={sender_qq or '未知'}，未匹配同伴 QQ={peer_qq(character) or '（未配置）'}，"
-                "按群友处理。\n"
+                f"{turn_object_line(character, is_peer=False)}\n"
                 + prompt
             )
             self.logger.info(
@@ -2092,10 +2417,7 @@ class DialogueContext(Block):
                 f"sender={sender_qq} kind=member"
             )
             return finish({
-                "text": (
-                    "情境自适应：按问题本身选择自我回应/环境反应/自然关联/沉默；"
-                    "禁止回答提问者；禁止把每个问题都转化成找同伴互动"
-                ),
+                "text": display or "眼前的人",
                 # EXTERNAL_TRIGGER 触发的剧情反应是单方面演绎，不算同伴间真实互聊，
                 # 记忆隔离：跳过长期设定抽取，避免虚构剧情被误记成真实关系进展。
                 "extract_priority": "skip",
@@ -2107,12 +2429,9 @@ class DialogueContext(Block):
             })
 
         if not immersion_on:
-            prompt = _build_external_trigger_prompt(character, display, group_name, content)
+            prompt = _build_external_trigger_prompt(character, display, group_name, content, gid)
             return finish({
-                "text": (
-                    "情境自适应：按问题本身选择自我回应/环境反应/自然关联/沉默；"
-                    "禁止回答提问者；禁止把每个问题都转化成找同伴互动"
-                ),
+                "text": display or "眼前的人",
                 "extract_priority": "skip",
                 "message_mode": "direct",
                 "user_prompt_text": prompt,
@@ -2174,14 +2493,14 @@ class DialogueContext(Block):
             prompt = (
                 "【当前环境】（空气与声响；本轮允许点同伴续聊）\n"
                 f"{narr}"
-                + _env_peer_ping_tail(character, chain_hint)
+                + _env_peer_ping_tail(character, chain_hint, gid, narr)
             )
             mode = "env_peer"
         else:
             prompt = (
-                "【当前环境】（不是某个具体群友在对你说话；这只是此刻的空气与声响）\n"
+                "【当前环境】（不是某个具体的人在对你说话；这只是此刻的空气与声响）\n"
                 f"{narr}"
-                + _env_voice_tail(character)
+                + _env_voice_tail(character, gid, narr)
             )
             mode = "env"
         self.logger.info(

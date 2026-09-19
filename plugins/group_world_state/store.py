@@ -201,10 +201,18 @@ class WorldStateStore:
             return empty_text_for(scope)
         lines = []
         for fact in facts:
-            key = fact.get("key") or "note"
+            # Dream / fantasy story memories stay out of daily prompt injection.
+            source = str(fact.get("source") or "")
+            key = str(fact.get("key") or "note")
+            if source == "story_dream" or key.startswith("dream_"):
+                continue
             text = (fact.get("text") or "").strip()
+            if text.startswith("[dream]"):
+                continue
             if text:
                 lines.append(f"- {key}: {text}")
+        if not lines:
+            return empty_text_for(scope)
         return "【本群已经发生、必须当作既定事实】\n" + "\n".join(lines)
 
     def set_fact(

@@ -1,6 +1,27 @@
+- rule_id: chat_host_mention
+  name: 主持人·被@
+  description: 官方机器人作为故事主持人（开始故事 / 结束）
+  workflow_id: chat:host
+  priority: 8
+  enabled: true
+  rule_groups:
+  - operator: and
+    rules:
+    - type: im_adapter
+      config:
+        im_name: qq_official_bot
+    - type: bot_mention
+      config: {}
+    - type: chat_type
+      config:
+        chat_type: 群聊
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.3
 - rule_id: chat_anon_mention
   name: 爱音·被@或/chat
-  description: 爱音侧被 @ 或 /chat 必回
+  description: 爱音侧被 @ 或 /chat 必回（仅 qq_user_bot / 3845655536）
   workflow_id: chat:anon
   priority: 5
   enabled: true
@@ -10,9 +31,6 @@
     - type: im_adapter
       config:
         im_name: qq_user_bot
-    - type: im_adapter
-      config:
-        im_name: qq_official_bot
   - operator: or
     rules:
     - type: prefix
@@ -53,9 +71,6 @@
     - type: im_adapter
       config:
         im_name: qq_user_bot
-    - type: im_adapter
-      config:
-        im_name: qq_official_bot
   - operator: and
     rules:
     - type: chat_type
@@ -358,9 +373,6 @@
     - type: im_adapter
       config:
         im_name: qq_user_bot
-    - type: im_adapter
-      config:
-        im_name: qq_official_bot
   - operator: or
     rules:
     - type: chat_type
@@ -813,9 +825,6 @@
     - type: im_adapter
       config:
         im_name: qq_user_bot
-    - type: im_adapter
-      config:
-        im_name: qq_official_bot
   - operator: or
     rules:
     - type: fallback

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -83,8 +84,9 @@ def character_by_im(im_name: str) -> Optional[str]:
     im_name = str(im_name or "").strip()
     if not im_name:
         return None
+    # Official bot is the story host, not anon RP.
     if im_name == "qq_official_bot":
-        return "anon"
+        return "host"
     for cid, meta in (load_characters().get("characters") or {}).items():
         if str(meta.get("im_name") or "") == im_name:
             return cid
@@ -124,8 +126,49 @@ def _read_persona_base_raw(character_id: str) -> str:
         return ""
 
 
+def _routing_bind(character_id: str) -> Dict[str, str]:
+    """config_v2.routing is the code-side peer source. Not injected into prompts."""
+    out = {k: "" for k in (
+        "self_id", "self_display", "self_qq", "peer_id", "peer_display",
+        "peer_qq", "peer_call", "peer_absent", "peer_forbid",
+    )}
+    try:
+        from .persona_config import load_config
+
+        doc = load_config(character_id)
+    except Exception:
+        return out
+    routing = doc.get("routing") or {}
+    meta = doc.get("meta") or {}
+    ident = doc.get("identity") or {}
+    out["self_id"] = str(meta.get("id") or character_id).strip()
+    out["self_display"] = str(ident.get("name_full") or meta.get("display_name") or "").strip()
+    out["self_qq"] = str(meta.get("qq") or "").strip()
+    out["peer_id"] = str(routing.get("peer_id") or "").strip()
+    out["peer_qq"] = str(routing.get("peer_qq") or "").strip()
+    social = doc.get("social_context") or {}
+    for rel in social.get("peer_relations") or []:
+        if not isinstance(rel, dict):
+            continue
+        if str(rel.get("target_id") or "").strip().lower() != out["peer_id"]:
+            continue
+        addr = str(rel.get("address_rule") or "").strip()
+        quoted = re.findall(r"「([^」]{1,12})」", addr)
+        if quoted:
+            out["peer_call"] = quoted[0]
+        elif addr and len(addr) <= 12:
+            out["peer_call"] = addr
+        names = rel.get("forbidden_names") or []
+        if isinstance(names, str):
+            names = [names]
+        if names:
+            out["peer_forbid"] = " / ".join(str(x) for x in names if x)
+        break
+    return out
+
+
 def peer_binding(character_id: str) -> Dict[str, str]:
-    """权威来源：角色人设 base 的 ```peer 块；缺字段再回落 characters.yaml。"""
+    """权威来源：config_v2.routing；缺字段再回落 base ```peer 与 characters.yaml。"""
     cid = str(character_id or "").strip()
     if not cid:
         return parse_peer_binding("")
@@ -133,7 +176,11 @@ def peer_binding(character_id: str) -> Dict[str, str]:
     if cached is not None:
         return dict(cached)
 
-    bind = parse_peer_binding(_read_persona_base_raw(cid))
+    bind = _routing_bind(cid)
+    legacy = parse_peer_binding(_read_persona_base_raw(cid))
+    for key, val in legacy.items():
+        if val and not bind.get(key):
+            bind[key] = val
     self_meta = get_character(cid)
     other = None
     for other_cid in (load_characters().get("characters") or {}):
@@ -217,7 +264,7 @@ def self_qq(character_id: str) -> str:
 
 
 def is_peer_qq(character_id: str, qq: str) -> bool:
-    """全局铁律：只有人设绑定的同伴 QQ 才算同伴；其余一律群友。"""
+    """代码侧铁律：只有人设绑定的同伴账号才算同伴；其余当眼前的人。"""
     peer = peer_qq(character_id)
     sender = str(qq or "").strip()
     return bool(peer and sender and sender == peer)
@@ -236,18 +283,27 @@ def classify_sender_qq(character_id: str, qq: str) -> str:
 
 
 def peer_identity_lock(character_id: str) -> str:
-    """写入提示：同伴只认配置 QQ（来源：人设绑定）。"""
+    """写入提示：对象已由系统判定。禁止把账号/编号教给模型。"""
     bind = peer_binding(character_id)
     display = bind.get("peer_display") or bind.get("peer_id") or "同伴"
-    pqq = bind.get("peer_qq") or "（未配置）"
     call = bind.get("peer_call") or display
     return (
-        f"【QQ身份铁律｜人设绑定】同伴只认 QQ {pqq}（{display}，当面称「{call}」）。"
-        "每句话先看发送者 QQ："
-        f"等于 {pqq} → 同伴互聊；"
-        "其它任何 QQ（含同名昵称、未登记 Bot、群友）一律当群友。"
-        "禁止用昵称/显示名判断同伴。"
+        f"本轮对象已由系统判定。同伴当面称「{call}」（{display}）。"
+        "其他人即使自称同名也当眼前的人。"
+        "禁止核验、猜测或念出任何账号、编号。"
         f"{peer_binding_summary(bind)}"
+    )
+
+
+def turn_object_line(character_id: str, *, is_peer: bool) -> str:
+    """本轮对象一句，不含账号。"""
+    bind = peer_binding(character_id)
+    call = bind.get("peer_call") or bind.get("peer_display") or "同伴"
+    if is_peer:
+        return f"本轮对象是同伴，当面称「{call}」。不要念任何账号或编号。"
+    return (
+        f"本轮对象是眼前的人，不是同伴。即使自称同名也不要把对方当成「{call}」。"
+        "不要念任何账号或编号。"
     )
 
 

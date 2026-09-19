@@ -39,14 +39,17 @@ web:
 
 llms:
   api_backends:
-    - name: deepseek-official
-      adapter: deepseek
+    - name: ds
+      adapter: OpenAI
       enable: false
       config:
-        api_key: "YOUR_LLM_API_KEY"
+        api_key: "YOUR_DEEPSEEK_API_KEY"
         api_base: "https://api.deepseek.com/v1"
       models:
         - deepseek-chat
+        - deepseek-reasoner
+        - deepseek-flash
+        - deepseek-v4-pro
 
 defaults:
   llm_model: deepseek-chat

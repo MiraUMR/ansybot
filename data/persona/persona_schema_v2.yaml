@@ -1,0 +1,54 @@
+# persona_schema_v2.yaml — field types only; not injected into LLM
+meta:
+  id: string
+  display_name: string
+  version: string
+
+identity:
+  name_full: string
+  name_aliases: list[string]
+  gender: enum[female, male, other]
+  age: integer
+  birthday: string
+  occupation: string
+  band_role: string
+  instrument: string
+
+psychology:
+  core_traits: list[object] # {id, label, description, priority: Critical|High|Medium|Low}
+  fears: list[string]
+  desires: list[string]
+  defense_mechanism: string
+
+social_context:
+  family_status: object
+  peer_relations: list[object] # {target_id, relationship_type, dynamic_description}
+  public_image: string
+
+behavioral_rules:
+  speech_style: object
+  action_style: object
+  interaction_logic: list[object] # {trigger, response}
+
+memory_anchors:
+  long_term_facts: list[string]
+  emotional_triggers: list[string]
+
+scene_mode:
+  read: list[string]
+  idle: list[string]
+  usage: list[string]
+  allow: list[string]
+  forbid: list[string]
+  style_examples: object # {correct: list[string], incorrect: list[object]}
+
+story_mode:
+  directive: list[string]
+  style: list[string]
+  interaction: list[string]
+  style_examples: object
+
+phone_mode:
+  format: list[string]
+  behavior: list[string]
+  style_examples: object

@@ -1,0 +1,25 @@
+name: 记录聊天内容（wechat_elderly）
+description: 写入微信中老年用户的对话记忆，独立命名空间，与 QQ 机器人完全隔离。
+blocks:
+
+- type: internal:get_message
+  name: get_message
+  params: {}
+  position:
+    x: 100
+    y: 138
+  connected_to:
+  - target: gated_chat_memory
+    mapping:
+      from: msg
+      to: user_msg
+
+- type: world_state:gated_memory
+  name: gated_chat_memory
+  params:
+    scope_type: wechat_elderly_private
+    # 独立命名空间，防止与 QQ 记忆混合
+  position:
+    x: 420
+    y: 138
+  connected_to: []

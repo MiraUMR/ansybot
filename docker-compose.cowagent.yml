@@ -1,0 +1,28 @@
+# CowAgent（原 chatgpt-on-wechat）独立栈，不要和 QQ 的 docker-compose.yml 混起。
+# 启动：docker compose -f docker-compose.cowagent.yml --env-file cowagent.env up -d
+
+services:
+  cowagent:
+    image: zhayujie/chatgpt-on-wechat
+    container_name: cowagent-wechat
+    restart: always
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "127.0.0.1:9899:9899"
+    env_file:
+      - cowagent.env
+    environment:
+      COW_LANG: "zh"
+      CHANNEL_TYPE: "web, weixin"
+      MODEL: "deepseek-v4-flash-0731"
+      BOT_TYPE: "openai"
+      OPEN_AI_API_BASE: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+      WEB_HOST: "0.0.0.0"
+      AGENT: "False"
+      AGENT_PERMISSION_MODE: "deny"
+      COW_DATA_DIR: "/home/agent/.cow"
+    volumes:
+      - ./cow:/home/agent/cow
+      - ./cow-data:/home/agent/.cow
+      - ./plugins/cow_momo:/app/plugins/momo_companion

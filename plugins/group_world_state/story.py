@@ -34,7 +34,9 @@ def canonical_bot_id(raw: str) -> str:
 
 def _known_ids() -> List[str]:
     chars = load_characters().get("characters") or {}
-    return [cid for cid in ("soyo", "anon") if cid in chars] or list(chars.keys())
+    return [cid for cid in ("soyo", "anon") if cid in chars] or [
+        c for c in chars.keys() if c != "host"
+    ]
 
 
 def load_story_triggers() -> Dict[str, Any]:

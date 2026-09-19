@@ -1,0 +1,23 @@
+FROM python:3.10-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg git build-essential cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+        "numpy<2" scipy soundfile pyyaml edge-tts \
+    && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir rvc-python
+
+COPY scripts/character_tts_server.py /app/server.py
+
+ENV TTS_ROOT=/data/tts \
+    TTS_DEVICE=cpu:0 \
+    TTS_HOST=0.0.0.0 \
+    TTS_PORT=8020 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8020
+CMD ["python", "-u", "/app/server.py"]

@@ -40,7 +40,7 @@ sample = (
     "# 不可推翻的强设定（最高优先级）\nbase body\n\n"
     "## 普通群聊（无标签 / 非@消息）\ncompanion body\n\n"
     "# 本群长期关系（仅本群有效）\nrelation body\n\n"
-    "# 当前群聊\n你现在在群「测试」。\n\n"
+    "# 当下\n只根据眼前这段对话回复。\n\n"
     "# 当前信息\n现在时间：2026-09-04\n\n"
     "# 近期聊天（仅同伴）\n"
     "-- 对话记录开始 --\n"
@@ -52,7 +52,7 @@ sample = (
 parts = split_system_prompt(sample)
 names = [n for n, _ in parts]
 check("拆出人设.base", "人设.base" in names)
-check("拆出人设.companion", "人设.companion" in names)
+check("拆出人设.companion.md", "人设.companion.md" in names)
 check("拆出本群长期关系", "本群长期关系" in names)
 check("拆出近期聊天.内容", "近期聊天.内容" in names)
 check("拆出回复规则", "回复规则" in names)

@@ -16,6 +16,7 @@ from .blocks import (
     save_persona_module,
     save_persona_module_pack,
 )
+from .compiler import REPLACED_MODULES, USE_COMPILER, compile_module
 from .persona_text import strip_workflow_chrome
 from .characters import get_character
 from .persona_pack import (
@@ -45,41 +46,38 @@ MODULE_META = (
     (
         "base",
         "身份与性格",
-        "每轮都注入：身份、性格、称呼。爱好长文已迁到左侧「爱好设定」。",
-        "文首【同伴绑定】```peer 块绑定同伴 QQ/称呼/身份；系统按 peer_qq 分流。"
-        "只写这个角色是谁、怎么说话、怎么称呼。"
-        "不要在 Base 堆吉他/红茶等爱好长文——到「爱好设定」按分类写，系统按本轮话题注入。"
-        "不要写「工作流」「优先级」「[P0]」。",
+        "由角色卡 config_v2 编译注入，不再读 base.md。",
+        "请到「角色卡」修改身份、性格、说话和公理。本页只预览编译结果。",
     ),
     (
         "companion",
         "同伴互聊",
-        "仅另一位 Bot 对你说话时注入，与 @ / 故事互斥。",
-        "只写跟同伴怎么聊、怎么收束。同伴是谁以 Base【同伴绑定】为准；被 @ 或讲故事时不加载。",
+        "已并入角色卡。同伴在线时编译器追加 <peer>，不再读 companion.md。",
+        "称呼、禁止名、多轮收束写在角色卡的同伴关系与 multi_turn_rules。",
     ),
     (
         "trigger",
         "被@响应",
-        "仅群友 @ 你或点名时注入，与同伴互聊 / 故事互斥。",
-        "只写被点到时怎么回。问答体禁令由工作流在系统提示末尾加 [P0]，不必在文里声明。",
+        "已并入角色卡。仅当本轮话术命中 interaction_logic 时注入 <triggers>。",
+        "请到「角色卡」改交互规则。本页不再写 trigger.md。",
     ),
     (
         "scene",
         "场景氛围",
-        "仅环境音 / 场面轮注入；被 @ 时不注入（场面仍会从别处进入提示）。",
-        "只写环境/场面怎么带入语气。无爱好命中时的默认反应以爱好设定 idle_ambient 为准。",
+        "已并入角色卡。仅环境音 / 场面轮编译注入 <scene_mode>。",
+        "请到「角色卡」改场景氛围。本页只预览编译结果。",
     ),
     (
         "story",
         "故事模式",
-        "仅故事进行中注入，与 @ / 同伴互聊互斥。",
-        "只写故事里怎么演、怎么停。日常接话让位由工作流处理。",
+        "已并入角色卡。仅故事进行中编译注入 <story_mode>，与 @ / 同伴互聊互斥。",
+        "请到「角色卡」改故事演绎规则。本页只预览编译结果。",
     ),
     (
         "mode_phone",
         "手机模式",
-        "命令 /phone 或 [手机模式] 开启后叠加；高于 Base speech。",
-        "只写即时通讯碎句、<break>、emoji/占位符。勿写括号动作。关闭：/phone off 或 /mode face。",
+        "已并入角色卡。/phone 或 [手机模式] 开启后编译注入 <phone_mode>，高于日常 speech。",
+        "请到「角色卡」改手机格式。关闭：/phone off 或 /mode face。",
     ),
 )
 WRITE_NOTE = (
@@ -108,13 +106,25 @@ def _meta_of(module: str):
     return next((m for m in MODULE_META if m[0] == module), (module, module, "", ""))
 
 
+def _compiled(module: str) -> bool:
+    return USE_COMPILER and module in REPLACED_MODULES
+
+
 def _module_row(character: str, module: str) -> dict:
     _mid, label, when, hint = _meta_of(module)
+    compiled = _compiled(module)
     path = persona_module_path(character, module)
     exists = path.is_file()
     updated = ""
     size = 0
-    if exists:
+    if compiled:
+        try:
+            preview = compile_module(character, module)
+            size = len(preview.encode("utf-8"))
+            exists = True
+        except Exception:
+            preview = ""
+    elif exists:
         stat = path.stat()
         size = int(stat.st_size)
         updated = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds")
@@ -126,6 +136,8 @@ def _module_row(character: str, module: str) -> dict:
         "bytes": size,
         "updated_at": updated,
         "exists": exists,
+        "source": "config_v2" if compiled else "markdown",
+        "readonly": compiled,
     }
 
 
@@ -156,12 +168,64 @@ def _hobby_row(character: str, cat: dict) -> dict:
     }
 
 
+def _hub_ui_path() -> Path:
+    # Same page as semantic-classify/ui: 角色卡 + 语义分类 + 人设正文 + 返回主页.
+    sibling = Path(__file__).resolve().parents[1] / "semantic_classify" / "ui.html"
+    if sibling.is_file():
+        return sibling
+    return Path(__file__).with_name("character_card_ui.html")
+
+
 @persona_bp.route("/ui", methods=["GET"])
 async def ui():
-    resp = Response(UI_PATH.read_text(encoding="utf-8"), mimetype="text/html; charset=utf-8")
+    # Sidebar /qqbot/persona still hits this route. Serve the unified hub.
+    path = _hub_ui_path()
+    resp = Response(path.read_text(encoding="utf-8"), mimetype="text/html; charset=utf-8")
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+CARD_UI_PATH = Path(__file__).with_name("character_card_ui.html")
+
+
+@persona_bp.route("/card-ui", methods=["GET"])
+async def card_ui():
+    resp = Response(
+        CARD_UI_PATH.read_text(encoding="utf-8"),
+        mimetype="text/html; charset=utf-8",
+    )
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
+@persona_bp.route("/<character>/config-v2", methods=["GET"])
+@require_auth
+async def get_config_v2(character: str):
+    from .persona_config import load_config
+
+    cid = (character or "").strip().lower()
+    if cid not in ALLOWED_CHARS:
+        return {"error": "unknown character"}, 404
+    try:
+        return load_config(cid)
+    except FileNotFoundError:
+        return {"error": "config_v2 missing"}, 404
+
+
+@persona_bp.route("/<character>/config-v2", methods=["PUT"])
+@require_auth
+async def put_config_v2(character: str):
+    from .persona_config import save_config
+
+    cid = (character or "").strip().lower()
+    if cid not in ALLOWED_CHARS:
+        return {"error": "unknown character"}, 404
+    data = await request.get_json() or {}
+    try:
+        return save_config(cid, data)
+    except ValueError as exc:
+        return {"error": str(exc)}, 400
 
 
 @persona_bp.route("/catalog", methods=["GET"])
@@ -190,13 +254,20 @@ async def get_module(character: str, module: str):
     mid = _module_or_404(module)
     if not cid or not mid:
         return {"error": "not found"}, 404
-    try:
-        text = strip_workflow_chrome(read_persona_module_raw(cid, mid))
-    except FileNotFoundError:
-        text = ""
-    pack = parse_persona_pack(text, mid)
-    pack["module"] = mid
     info = _module_row(cid, mid)
+    if info.get("readonly"):
+        try:
+            text = compile_module(cid, mid)
+        except Exception as exc:
+            text = f"（角色卡编译失败：{exc}）"
+        pack = {"module": mid, "preview": [{"key": "compiled", "value": text, "note": ""}]}
+    else:
+        try:
+            text = strip_workflow_chrome(read_persona_module_raw(cid, mid))
+        except FileNotFoundError:
+            text = ""
+        pack = parse_persona_pack(text, mid)
+        pack["module"] = mid
     info["text"] = text
     info["pack"] = pack
     info["sections"] = [
@@ -204,12 +275,13 @@ async def get_module(character: str, module: str):
         for k, lab, kind in MODULE_SECTIONS.get(mid, [])
     ]
     info["character"] = cid
-    info["injected_len"] = len(load_persona_module(cid, mid))
+    info["injected_len"] = len(text if info.get("readonly") else load_persona_module(cid, mid))
     info["kind"] = "module"
-    info["hint"] = (
-        "用表单分条填写；base/trigger 保存为紧凑 XML 注入，其它模块为 [PERSONA_PACK]（注入时去掉 :: 备注）。"
-        "旧 Markdown / PERSONA_PACK 打开时会自动拆分。"
-    )
+    if not info.get("readonly"):
+        info["hint"] = (
+            "用表单分条填写；base/trigger 保存为紧凑 XML 注入，其它模块为 [PERSONA_PACK]（注入时去掉 :: 备注）。"
+            "旧 Markdown / PERSONA_PACK 打开时会自动拆分。"
+        )
     return info
 
 
@@ -220,6 +292,8 @@ async def put_module(character: str, module: str):
     mid = _module_or_404(module)
     if not cid or not mid:
         return {"error": "not found"}, 404
+    if _compiled(mid):
+        return {"error": "该模块已由角色卡编译，请在「角色卡」保存"}, 409
     data = await request.get_json() or {}
     try:
         if isinstance(data.get("pack"), dict) or any(

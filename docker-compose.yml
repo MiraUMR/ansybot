@@ -3,8 +3,14 @@ services:
     image: lss233/kirara-agent-framework:latest
     container_name: kirara-qq-bot
     restart: always
+    env_file:
+      - .env
+    environment:
+      STORY_HMAC_SECRET: ${STORY_HMAC_SECRET:-dev-story-hmac-change-me}
+      CHARACTER_TTS_URL: ${CHARACTER_TTS_URL:-http://character-tts:8020}
     volumes:
       - ./data:/app/data
+      - ./migrations:/app/migrations:ro
       - ./patches/gateway.py:/usr/local/lib/python3.11/site-packages/ymbotpy/gateway.py:ro
       - ./patches/openai_adapter.py:/usr/local/lib/python3.11/site-packages/kirara_ai/plugins/llm_preset_adapters/openai_adapter.py:ro
       - ./patches/im_messages.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/implementations/blocks/im/messages.py:ro
@@ -28,7 +34,7 @@ services:
     command:
       - sh
       - -c
-      - python -c "import im_onebot_adapters" 2>/dev/null || pip install -q chatgpt-mirai-qq-bot-onebot-adapter; python -c "import jieba" 2>/dev/null || pip install -q jieba; exec python -m kirara_ai -H 0.0.0.0 -p 8080
+      - python -c "import im_onebot_adapters" 2>/dev/null || pip install -q chatgpt-mirai-qq-bot-onebot-adapter -i https://pypi.tuna.tsinghua.edu.cn/simple; python -c "import jieba" 2>/dev/null || pip install -q jieba -i https://pypi.tuna.tsinghua.edu.cn/simple; exec python -m kirara_ai -H 0.0.0.0 -p 8080
 
   napcat:
     image: mlikiowa/napcat-docker:latest
@@ -41,6 +47,7 @@ services:
       NAPCAT_GID: "0"
       WEBUI_TOKEN: ${WEBUI_TOKEN:-change-me}
       WEBUI_PREFIX: /qqbot/napcat
+      ACCOUNT: "3845655536"
     ports:
       - "6099:6099"
     depends_on:
@@ -60,6 +67,7 @@ services:
       NAPCAT_GID: "0"
       WEBUI_TOKEN: ${WEBUI_TOKEN_SOYO:-change-me-soyo}
       WEBUI_PREFIX: /qqbot/napcat-soyo
+      ACCOUNT: "2246246527"
     ports:
       - "6100:6099"
     depends_on:
@@ -67,3 +75,126 @@ services:
     volumes:
       - ./napcat-soyo/config:/app/napcat/config
       - ./napcat-soyo/QQ:/app/.config/QQ
+
+  # ─── WeChatPadPro 依赖：MySQL ─────────────────────────────────
+  wechatpadpro-mysql:
+    image: mysql:8.0
+    container_name: wechatpadpro-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WX_MYSQL_ROOT_PASSWORD:-wxroot123456}
+      MYSQL_DATABASE: weixin
+      MYSQL_USER: weixin
+      MYSQL_PASSWORD: ${WX_MYSQL_PASSWORD:-weixin123}
+    volumes:
+      - wechatpadpro_mysql_data:/var/lib/mysql
+    # 不暴露到宿主机端口（仅容器内通信）
+
+  # ─── WeChatPadPro 依赖：Redis ────────────────────────────────
+  wechatpadpro-redis:
+    image: redis:7-alpine
+    container_name: wechatpadpro-redis
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - wechatpadpro_redis_data:/data
+
+  # ─── WeChatPadPro 授权云转发（避免 Go 客户端直连超时）────────
+  wechatpadpro-proxy:
+    image: python:3.12-alpine
+    container_name: wechatpadpro-proxy
+    restart: always
+    volumes:
+      - ./scripts/wx_connect_proxy.py:/proxy.py:ro
+    command: ["python", "/proxy.py"]
+
+  # ─── WeChatPadPro 个人微信服务（iPad 协议）───────────────────
+  wechatpadpro:
+    image: wechatpadpro/wechatpadpro:latest
+    container_name: wechatpadpro
+    restart: always
+    depends_on:
+      - wechatpadpro-mysql
+      - wechatpadpro-redis
+      - wechatpadpro-proxy
+    env_file:
+      - wechatpadpro.env
+    extra_hosts:
+      - "adminkeyservice.knowhub.cloud:154.211.22.209"
+    dns:
+      - 8.8.8.8
+      - 223.5.5.5
+    environment:
+      DB_HOST: wechatpadpro-mysql
+      DB_PORT: "3306"
+      DB_DATABASE: weixin
+      DB_USERNAME: weixin
+      DB_PASSWORD: ${WX_MYSQL_PASSWORD:-weixin123}
+      MYSQL_CONNECT_STR: weixin:${WX_MYSQL_PASSWORD:-weixin123}@tcp(wechatpadpro-mysql:3306)/weixin?charset=utf8mb4&parseTime=true&loc=Local
+      REDIS_HOST: wechatpadpro-redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      TZ: Asia/Shanghai
+      ADMIN_KEY: ${WX_PADPRO_ADMIN_KEY:-change-me-padpro-admin}
+      PORT: "1238"
+      GODEBUG: "http2client=0,netdns=go"
+      WEBHOOK_URL: http://kirara-wechat-elderly:8080/wechat-elderly/webhook
+      WEBHOOK_SECRET: ${WX_WEBHOOK_SECRET:-change-me-webhook-secret}
+    ports:
+      - "127.0.0.1:8059:1238"
+      - "127.0.0.1:8060:8080"
+    volumes:
+      - ./wechatpadpro.env:/app/.env:ro
+      - ./wechatpadpro_data:/data
+
+  # ─── 微信中老年陪伴机器人（与 QQ 机器人完全隔离） ─────────────
+  kirara-wechat-elderly:
+    image: lss233/kirara-agent-framework:latest
+    container_name: kirara-wechat-elderly
+    restart: always
+    depends_on:
+      - wechatpadpro
+    env_file:
+      - wechat_elderly.env          # 独立环境变量，不共享 QQ 的 .env
+    volumes:
+      - ./wechat_data:/app/data      # 独立数据目录
+      # 复用通用 patches（不含 QQ 专用逻辑）
+      - ./patches/openai_adapter.py:/usr/local/lib/python3.11/site-packages/kirara_ai/plugins/llm_preset_adapters/openai_adapter.py:ro
+      - ./patches/im_messages.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/implementations/blocks/im/messages.py:ro
+      - ./patches/llm_chat.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/implementations/blocks/llm/chat.py:ro
+      - ./patches/dispatch_message_rules.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/core/dispatch/rules/message_rules.py:ro
+      - ./patches/dispatch_registry.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/core/dispatch/registry.py:ro
+      - ./patches/dispatcher.py:/usr/local/lib/python3.11/site-packages/kirara_ai/workflow/core/dispatch/dispatcher.py:ro
+      - ./patches/builtin_composes.py:/usr/local/lib/python3.11/site-packages/kirara_ai/memory/composes/builtin_composes.py:ro
+      - ./patches/llm_manager.py:/usr/local/lib/python3.11/site-packages/kirara_ai/llm/llm_manager.py:ro
+      - ./patches/llm_model_ref.py:/usr/local/lib/python3.11/site-packages/kirara_ai/llm/model_ref.py:ro
+      - ./patches/global_config.py:/usr/local/lib/python3.11/site-packages/kirara_ai/config/global_config.py:ro
+      - ./plugins/group_world_state:/usr/local/lib/python3.11/site-packages/kirara_ai/plugins/group_world_state:ro
+      # WeChatPadPro 适配器插件（仅此容器挂载，QQ 机器人不挂载）
+      - ./plugins/im_wechatpadpro_adapter:/usr/local/lib/python3.11/site-packages/kirara_ai/plugins/im_wechatpadpro_adapter:ro
+    ports:
+      - "127.0.0.1:8081:8080"        # WebUI 端口与 QQ 机器人（8080）不冲突
+    command:
+      - sh
+      - -c
+      - exec python -m kirara_ai -H 0.0.0.0 -p 8080
+
+  character-tts:
+    build:
+      context: .
+      dockerfile: Dockerfile.character-tts
+    image: qq-bot-character-tts:latest
+    container_name: character-tts
+    restart: always
+    environment:
+      TTS_ROOT: /data/tts
+      TTS_DEVICE: ${TTS_DEVICE:-cpu:0}
+    volumes:
+      - ./data/tts:/data/tts
+      - ./scripts/character_tts_server.py:/app/server.py:ro
+    ports:
+      - "127.0.0.1:8020:8020"
+
+volumes:
+  wechatpadpro_mysql_data:
+  wechatpadpro_redis_data:

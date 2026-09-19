@@ -1,0 +1,8 @@
+# 角色声替：NapCat 侧把回复合成语音条。官方号仍只发文字。
+# 模型文件在 models/，不进 git；用 scripts/download_character_rvc.py 拉取。
+enabled: true
+api_url: http://character-tts:8020
+timeout_seconds: 90
+keep_text: true
+max_chars: 180
+min_chars: 1

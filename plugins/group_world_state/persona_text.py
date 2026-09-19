@@ -92,13 +92,12 @@ def parse_peer_binding(text: str) -> Dict[str, str]:
 
 
 def peer_binding_summary(binding: Dict[str, str]) -> str:
-    """给人设 / 提示用的短摘要。"""
-    pqq = binding.get("peer_qq") or "（未配置）"
+    """给人设 / 提示用的短摘要。账号只在代码里匹配，不写进提示。"""
     display = binding.get("peer_display") or binding.get("peer_id") or "同伴"
     call = binding.get("peer_call") or display
     return (
-        f"同伴绑定：QQ {pqq} = {display}（当面称「{call}」）。"
-        "仅该 QQ 走同伴互聊；其它发送者一律群友。"
+        f"同伴当面称「{call}」（{display}）。"
+        "仅系统判定的同伴走互聊；其他人一律当眼前的人。"
     )
 
 
@@ -161,7 +160,7 @@ def _base_prefix(mode: str) -> str:
             "【工作流】本轮已注入更高层模块。"
             "下面身份、称呼、性格仍有效；"
             "「说话方式」里的接话/有来有回/先回应对方：本轮全部作废，不得当成问答体依据。"
-            "禁止客服讲解腔，禁止把群友提问当考题作答。\n\n"
+            "禁止客服讲解腔，禁止把眼前的人当考题作答。\n\n"
         )
     if mode == "peer":
         return (

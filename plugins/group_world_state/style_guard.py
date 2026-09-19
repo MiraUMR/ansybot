@@ -11,34 +11,42 @@ from kirara_ai.llm.llm_manager import LLMManager
 
 CRITICAL_ADDONS = {
     "soyo": (
-        "⚠️ 特别注意（素世版）：事实/日期/设定题也用素世的口气直接说，"
-        "可以模糊、可以夹私货。禁止百科句，禁止先写动作说明书，禁止纠错腔。"
+        "⚠️ 特别注意（素世版）：事实/日期/设定题用素世的口气直接说，"
+        "禁止百科句，禁止先写动作说明书，禁止纠错腔。"
+        "但口气可以随便，事实不行：不确定就淡淡认一句不知道（不清楚。/ 没记住。），"
+        "禁止编造数字、日期、人名、地名、专有名词。"
+        "禁止 markdown：不要代码围栏、不要 **加粗**、不要 # 标题。像本人发微信纯文本。"
     ),
     "anon": (
-        "⚠️ 特别注意（爱音版）：事实题先有点情绪再带出信息，允许夸张。"
+        "⚠️ 特别注意（爱音版）：事实题先有点情绪再带出信息，语气可以夸张。"
+        "夸张只许用在语气上，不许用在事实上：不确定就直接说不知道"
+        "（诶不知道欸。/ 这个我真不清楚。），禁止编造数字、日期、人名、地名、专有名词。"
         "不要平铺直叙。不要每条都拐去 soyorin；只有事实本身关于她时才点名。"
+        "禁止 markdown：不要代码围栏、不要 **加粗**、不要 # 标题。像本人发微信纯文本。"
     ),
 }
 
 
 def critical_block_for(character: str) -> str:
+    """声线交给 voice_pack；这里只放 CRITICAL 层独有的越权禁令。"""
     addon = CRITICAL_ADDONS.get(character) or CRITICAL_ADDONS["soyo"]
     call = "小爱音" if character != "anon" else "soyorin"
     if character == "anon":
-        voice = (
-            "用千早爱音的口吻：碎、快、可以抢话、可以 Anyway。"
-            "不是温柔秘书，不是完整礼貌句。"
+        lock = (
+            "身份锁：你碎快先热闹，同伴软慢后置。节奏、口味、口头习惯都不能和她对调。"
+            "没问到吃的不要主动搬口味锚点。"
         )
     else:
-        voice = (
-            "用长崎素世的口吻：淡、短、可以懒、可以嫌。"
-            "不是客服完整句，不是行程安排。"
+        lock = (
+            "身份锁：你软慢后置，同伴碎快先热闹。节奏、口味、口头习惯都不能和她对调。"
+            "没问到吃的不要主动搬口味锚点。"
         )
     return (
         "[CRITICAL]\n"
-        f"{voice}禁止问答体。禁止提及提问者（不要说有人问/你问的）。\n"
+        f"{lock}禁止问答体。禁止提及提问者（不要说有人问/你问的）。\n"
         "不要把无关问题都转化成找同伴；若本轮已经涉及同伴，必须用规定称呼"
         f"（{call}），这不是强制绑定。\n"
+        "禁止两截转进：不要答完再拐去问同伴「你说，是不是」。\n"
         f"{addon}\n"
         "禁止导演复盘，禁止动作说明书和小说旁白。像本人发微信，不是客服。\n"
         "[/CRITICAL]"
@@ -47,7 +55,6 @@ def critical_block_for(character: str) -> str:
 
 def critical_instruction_for(character: str, mode: str) -> str:
     """工作流 P0：仅 story / direct（Trigger）非空，挂在系统提示末尾覆盖低层规则。"""
-    cid = character if character in ("soyo", "anon") else "soyo"
     mode = (mode or "").strip()
     if mode == "story":
         return (
@@ -61,22 +68,18 @@ def critical_instruction_for(character: str, mode: str) -> str:
         )
     if mode != "direct":
         return ""
-    if cid == "anon":
-        fact = (
-            "事实查询：先有口气再带出信息，允许夸张；禁止平铺确认腔；"
-            "不要每条都拐去 soyorin。"
-        )
-    else:
-        fact = (
-            "事实查询：用素世口气直接说，可以模糊、可以夹私货；"
-            "禁止纠错腔；禁止百科句。"
-        )
+    # 语气/事实的口吻部分已在 CRITICAL_ADDONS 里说过，这里不重复，只补事实红线。
     return (
         "[P0: NARRATIVE LOCK ACTIVE]\n"
         "⚠️ direct/@ 最高优先级：Trigger + 本指令覆盖 Base「接话」惯性。\n"
-        f"- {fact}\n"
-        "- 对群友：禁问答体/复读选择问/给许可拒绝；无问号提问也改陈述。\n"
-        "- 点名同伴：类型3，用规定称呼当面说；禁「她」向群友转述。\n"
+        "- 事实红线：口气可以编，事实不能编。不确定就用角色口气认一句不知道，"
+        "禁止杜撰数字/日期/人名/地名/专有名词，禁止把猜测说成肯定。\n"
+        "- 前后不能自相矛盾：不要否认自己刚说过的话，不要凭空多出没提过的人和事；"
+        "刚说出口的邀约或态度，下一句不要反着骂。\n"
+        "- 身份锁：节奏口味不要和同伴对调。没问到吃的不要主动搬口味锚点。\n"
+        "- 对眼前的人：禁问答体/复读选择问/给许可拒绝；无问号提问也改陈述。\n"
+        "- 点名同伴：类型3，用规定称呼当面说；禁「她」向外转述。\n"
+        "- 禁止在回复里写出任何账号、编号。\n"
         "- 若有 [ARBITRATION: peer_interaction] / TOPIC_LOCK peer_interaction："
         "忽略 deflect/idle，直接互动，禁止分析规则冲突。\n"
         "[INSTRUCTION: DO NOT ANALYZE RULE CONFLICTS. DIRECT ACTION ONLY.]\n"
@@ -124,12 +127,171 @@ _DIRECTOR_RULES: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"先假装没看到"), "先假装没看到"),
 ]
 
+_SOYO_FIXED_VOICE = re.compile(
+    r"[（(]就是不想让(?:某人|她)[^）)]{0,12}[）)]|"
+    r"就是不想让(?:某人|她)知道我在意[。．]?|"
+    r"红茶还有[。．]?|"
+    r"看她的脸色[。．]?|"
+    r"看脸色[。．]?|"
+    r"周五可以吗[。．]?|"
+    r"我哪天都行[。．]?|"
+    r"哈啊\.{2,}|哈啊…+|"
+    r"大吉岭|"
+    r"这次就算了[。．]?|"
+    r"你倒是把话说完[。．]?|"
+    r"小爱音先坐下[。．]?|"
+    r"(?:^|[\s。．])这样啊[。．，,]*|"
+    r"(?:^|[\s。．])也好[。．]*|"
+    r"小爱音[…。.\s]{0,8}你说[，,]?\s*是不是"
+)
+
+
+_SOYO_CATCHPHRASE = re.compile(
+    r"[（(][^）)]{0,24}不想让某人知道我在意[^）)]{0,8}[）)]|"
+    r"就是不想让某人知道我在意[。．]?"
+)
+
+_INNER_ASIDE_RE = re.compile(r"[（(]([^）)]{0,48})[）)]")
+_INNER_HINT = re.compile(
+    r"不想|在意|其实|心里|才不|才要|不能让|别让|不让|某人|偷偷|看出来|别把|还是别|心里话|腹诽|误会|顺手|识货|不理我"
+)
+# 串腔：爱音不该用素世淡藏；素世不该用爱音碎急嘴硬
+_ANON_INNER_FORBIDDEN = re.compile(r"不想让某人|只是顺手|别让她误会|说了也没用|看她脸色")
+_SOYO_INNER_FORBIDDEN = re.compile(r"才不想|偷偷关注|好久了|不理我怎么办|才不是特意|诶嘿|识货")
+# 内心括号写成两段式剧情揭秘（其实...早就...这个不能让她知道），太像写小说，不像真人一拍反应。
+_INNER_NOVEL_RE = re.compile(
+    r"其实.{2,30}(已经|早就|一直).{0,30}(不能|别|不想|不敢)[^）)]{0,20}(知道|发现)"
+)
+_INNER_LEN_LIMIT = 20
+
+# 右引号比左引号多，说明前面「XX做出「」被截断只剩了尾巴（常见于「」的表情/样子这类配语）。
+_STRAY_CLOSE_QUOTE_TAIL_RE = re.compile(r"」\s*的(表情|样子|语气|声音|口气)[，,。.!！]*")
+
+
+_MD_FENCE_RE = re.compile(r"```[\w+-]*[ \t]*\n?([\s\S]*?)```")
+_MD_HEADING_RE = re.compile(r"^#{1,6}[ \t]+", re.M)
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MD_INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+_MD_LEFTOVER_FENCE_RE = re.compile(r"```[\w+-]*")
+
+
+def looks_like_markdown(text: str) -> bool:
+    """模型偶发把回复包进代码围栏 / 加粗 / 标题。"""
+    raw = text or ""
+    if "```" in raw:
+        return True
+    if _MD_BOLD_RE.search(raw) or _MD_HEADING_RE.search(raw):
+        return True
+    if _MD_INLINE_CODE_RE.search(raw):
+        return True
+    return False
+
+
+def markdown_hits(text: str) -> List[str]:
+    return ["markdown格式"] if looks_like_markdown(text) else []
+
+
+def scrub_markdown_markup(text: str) -> str:
+    """QQ 群只发纯文本：拆掉围栏/加粗/标题/行内代码，空围栏整段丢掉。"""
+    out = text or ""
+    out = _MD_FENCE_RE.sub(lambda m: (m.group(1) or "").strip(), out)
+    out = _MD_LEFTOVER_FENCE_RE.sub("", out)
+    out = _MD_HEADING_RE.sub("", out)
+    out = _MD_BOLD_RE.sub(r"\1", out)
+    out = _MD_LINK_RE.sub(r"\1", out)
+    out = _MD_INLINE_CODE_RE.sub(r"\1", out)
+    out = out.replace("**", "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
+
+
+def scrub_stray_close_quote(text: str) -> str:
+    """清掉多余的右引号残留：只在「」数量不配对时动手，不影响正常成对使用。"""
+    raw = text or ""
+    if raw.count("」") <= raw.count("「"):
+        return raw
+    out = _STRAY_CLOSE_QUOTE_TAIL_RE.sub("", raw)
+    out = out.replace("」", "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    return out.strip()
+
+
+def scrub_long_inner_aside(text: str) -> str:
+    """内心括号只留一拍反应：写成两段式剧情揭秘或超长的，直接去掉这一句括号。"""
+
+    def repl(m: re.Match) -> str:
+        inner = (m.group(1) or "").strip()
+        raw = m.group(0)
+        if not _INNER_HINT.search(inner):
+            return raw
+        if _INNER_NOVEL_RE.search(inner) or len(inner) > _INNER_LEN_LIMIT:
+            return ""
+        return raw
+
+    out = _INNER_ASIDE_RE.sub(repl, text or "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    out = re.sub(r"^[。．，,\s]+", "", out)
+    return out.strip()
+
+
+def strip_inner_asides_for_peer(text: str) -> str:
+    """同伴入站：括号内心听不见，只保留会说出口的字。"""
+    out = re.sub(r"[（(][^）)]{0,48}[）)]", "", text or "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
+
+
+def scrub_wrong_inner_style(character: str, text: str) -> str:
+    """拆掉串到另一人风格的内心括号；保留本人风格。"""
+    forbid = _SOYO_INNER_FORBIDDEN if character == "soyo" else _ANON_INNER_FORBIDDEN
+
+    def repl(m: re.Match) -> str:
+        inner = (m.group(1) or "").strip()
+        if not _INNER_HINT.search(inner):
+            return m.group(0)
+        if forbid.search(inner):
+            return ""
+        return m.group(0)
+
+    out = _INNER_ASIDE_RE.sub(repl, text or "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    out = re.sub(r"^[。．，,\s]+", "", out)
+    return out.strip()
+
+
+def scrub_soyo_catchphrase(text: str) -> str:
+    """素世出口：去掉反复出现的固定内心口头禅。"""
+    out = _SOYO_CATCHPHRASE.sub("", text or "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    out = re.sub(r"^[。．，,\s]+", "", out)
+    return out.strip()
+
+
+def scrub_soyo_fixed_voice(text: str) -> str:
+    """爱音出口：删掉素世固定句，避免提示里的禁例被原样发出。"""
+    out = _SOYO_FIXED_VOICE.sub("", text or "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    out = re.sub(r"^[。．，,\s]+", "", out)
+    out = re.sub(r"[。．]{2,}", "。", out)
+    return out.strip()
+
+
 _AI_SECRETARY_RULES: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"我记下了"), "我记下了"),
     (re.compile(r"你负责"), "你负责"),
     (re.compile(r"的样子我还记得"), "的样子我还记得"),
     (re.compile(r"别再看手机"), "别再看手机"),
     (re.compile(r"这次我帮你"), "这次我帮你"),
+    (re.compile(r"你先说"), "你先说"),
+    (re.compile(r"我听着"), "我听着"),
+    (re.compile(r"这个我熟"), "这个我熟"),
 ]
 # AI 段落句：让步 + 条件兜底 + 约时间，读起来像助理排期。
 _AI_PARAGRAPH_RULES: List[Tuple[re.Pattern[str], str]] = [
@@ -138,8 +300,23 @@ _AI_PARAGRAPH_RULES: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"(周末|周[一二三四五六日天]|明天|后天|下午|晚上).{0,8}吧[，,].{0,10}(我空着|我有空|没事干|有空)"), "AI约时间句"),
     (re.compile(r"(安排明白|安排清楚|帮你约好|我来安排)"), "AI安排腔"),
 ]
-_OPEN_SOYO = re.compile(r"^[\s\*＿_]*小爱音[，,]")
-_OPEN_ANON = re.compile(r"(?i)^[\s\*＿_]*soyorin[，,]")
+_OPEN_SOYO = re.compile(r"^[\s\*＿_]*(?:……|…+|\.{2,})?小爱音[，,]")
+_OPEN_ANON = re.compile(r"(?i)^[\s\*＿_]*(?:……|…+|\.{2,})?soyorin[，,]")
+_VOCATIVE_HEADER = {
+    "soyo": re.compile(r"(?m)^[\s\*＿_]*(?:……|…+|\.{2,})?小爱音[，,]\s*"),
+    "anon": re.compile(r"(?mi)^[\s\*＿_]*(?:……|…+|\.{2,})?soyorin[，,]\s*"),
+}
+
+
+def scrub_vocative_header(character: str, text: str) -> str:
+    """清掉「小爱音，/soyorin，」当段落抬头；名字仍可留在句中。"""
+    pat = _VOCATIVE_HEADER.get((character or "").strip() or "soyo")
+    if not pat:
+        return text or ""
+    out = pat.sub("", text or "")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 # 环境音里没有对话对象：一旦对着人说话就破坏代入感。
 _ENV_ADDRESS_RE = re.compile(r"[你您]")
@@ -162,6 +339,39 @@ _INTERVIEW_RULES: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"你怎么问"), "你怎么问"),
 ]
 
+# 「不行不行 / 不要不要」是爱音着急叠词，不是「行不行」选择问。
+_PANIC_REDUP_RE = re.compile(r"不行不行|不要不要|不是不是")
+_VOICE_Q_TIC_RE = re.compile(r"(?:诶|哈|啊|哇|喂)[？?]+|(?:真的假的)[？?]?")
+_PEER_DISTRESS_RE = re.compile(
+    r"(哭了|在哭|好像在哭|要跑|跑了|跑掉|追上|快追|去追|追呀|追啊|"
+    r"要你追|追不到|追她|快去追|人都没了|人都沒了|别回来|別回來|"
+    r"不要你了|不要她了|太坏了|始乱终弃)"
+)
+_CARE_CLAUSE_RE = re.compile(r"(去看|追上|得去|不行不行|担心|哭|别跑|等等我)")
+_COLD_CLAUSE_RE = re.compile(r"(麻烦死了|算了.{0,10}明天|反正明天|谁爱追)")
+_SHOE_EXCUSE_RE = re.compile(
+    r"(鞋带.{0,12}(没系|沒系|要是|松了)|追什么追|又不差这一会儿|"
+    r"总行了吧|怪你们|你们这些|催命鬼)"
+)
+_CHASE_IN_FLIGHT_RE = re.compile(
+    r"(别跑|等等我|一直在追|我这不是一直在追|追上去了|我现在就追|"
+    r"马上追上来|追不到也要追|还不去追)"
+)
+_YOU_VS_SOYORIN_RE = re.compile(
+    r"(?i)你.{0,24}比soyorin|比soyorin.{0,16}(跑|快)|你鞋带"
+)
+_CHASER_CLAIM_RE = re.compile(r"(追到了|去追小爱音|我去追|追上她了)")
+
+
+def looks_chase_in_flight(text: str) -> bool:
+    """同伴已经在追 / 喊别跑：互聊应续场面，不是闲聊收束。"""
+    return bool(_CHASE_IN_FLIGHT_RE.search(text or ""))
+
+
+def _uses_second_person(text: str) -> bool:
+    raw = text or ""
+    return bool(re.search(r"你", raw)) and not re.search(r"^你们", raw.strip())
+
 _QA_BODY_RULES: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"([\u4e00-\u9fff]{1,2})不\1"), "复读选择问"),
     (re.compile(r"让她自己来问|要她自己来问|她自己来问"), "向提问者转述同伴"),
@@ -178,27 +388,28 @@ REWRITE_USER = (
     "[CRITICAL] 刚才的回复违规：{reasons}。"
     "整段重写。禁止问答体、禁止提及提问者、禁止导演复盘「这个状况」。"
     "禁止复读问题（紧不紧张/看不看），禁止向提问者表态（不看/让她自己来问/别催），"
-    "禁止用「她」向群友转述同伴。"
+    "禁止用「她」向外转述同伴。"
     "禁止反问（吗/对吧/真的假的/要不要），禁止答题（会的/大概就是）。"
     "禁止AI段落句：不要「也行，要是踩雷了就找你。周末下午吧，我空着」这种让步+兜底+约时间。"
     "改成角色正在发的一句短微信，碎一点、停半拍，不要排期说明书。"
     "{address}"
     "用角色本人说话，禁止秘书腔（我记下了/你负责/我来安排）。"
-    "禁止「soyorin，」或「小爱音，」当抬头。不要动作说明书，不要叙事内化。"
+    "禁止陪聊腔：你先说、我听着、这个我熟。"
+    "禁止「soyorin，」或「小爱音，」当抬头。不要动作说明书。"
 )
 
 # 重写仍脏时的硬兜底（无问号、无禁用称呼、不答题）
 _FALLBACK_DIRECT = {
     "anon": "哇——等等！",
-    "soyo": "……稍等。",
+    "soyo": "嗯。",
 }
 _FALLBACK_ENV = {
     "anon": "……好困。",
-    "soyo": "……水开了。",
+    "soyo": "水开了。",
 }
 _FALLBACK_PEER = {
     "anon": "嗯！",
-    "soyo": "知道了。",
+    "soyo": "……嗯。",
 }
 
 
@@ -208,8 +419,13 @@ def fallback_safe_reply(
     trigger_mode: bool = False,
     peer_mode: bool = False,
     env_mode: bool = False,
+    user_text: str = "",
 ) -> str:
     cid = character if character in ("anon", "soyo") else "soyo"
+    if looks_chase_in_flight(user_text) or looks_peer_distress_cue(user_text):
+        if cid == "soyo":
+            return "……小爱音，你追这么急。"
+        return "soyorin等等我！"
     if env_mode:
         return _FALLBACK_ENV[cid]
     if peer_mode:
@@ -255,12 +471,42 @@ def _rewrite_address(
             "拆掉排期腔：不要一次说完「也行+要是踩雷+周末空着」。"
             "改成一两句短反应，时间含糊带过或干脆不约。"
         )
+    if "危急却收束" in reasons:
+        extra += (
+            "同伴在跑或在哭：必须立刻追上去，禁止算了明天见、禁止拿鞋带当借口停住。"
+            "上一句那些冷收束是口误，这轮作废。"
+        )
+    if "把soyorin当第三人称" in reasons:
+        extra += (
+            "对面就是 soyorin，「你」=她。禁止把 soyorin 说成旁边第三个人去跟「你」比较。"
+            "鞋带若散了是你自己的，不是她的。"
+        )
+    if "被追却去追" in reasons:
+        extra += (
+            "你是跑开/被追的那一方，小爱音在追你。不要说自己追到了，不要去追她。"
+        )
+    if "天气限流" in reasons:
+        extra += (
+            "本轮不要提天气、冷热、晴雨、潮闷、体感、天色。改成眼前别的一句短反应。"
+        )
+    if "markdown格式" in reasons:
+        extra += (
+            "禁止 markdown。不要代码围栏、不要**加粗**、不要#标题、不要行内代码。"
+            "只输出微信纯文本。"
+        )
+    if "账号编号外泄" in reasons:
+        extra += "不要写出任何账号或编号。用称呼或「你」说话。"
+    if "公式转进" in reasons:
+        extra += (
+            "不要「小爱音……你说，是不是」这种转进。"
+            "接住眼前这句就停，不要另起一句去问同伴。"
+        )
     if env_peer_mode:
         call = "soyorin" if character == "anon" else "小爱音"
         return extra + (
             f"本轮是环境闲聊里主动点同伴：必须出现「{call}」，"
-            "可对同伴用「你」；禁止回答旁白、禁止找说话人；不要括号动作。"
-            "保留 [CQ:at,qq=…] 原样。"
+            "可对同伴用「你」；禁止回答旁白、禁止找说话人；不要动作括号。"
+            "内心至多一句且用本人腔。保留 [CQ:at,qq=…] 原样。"
         )
     if env_mode:
         return extra + (
@@ -275,11 +521,14 @@ def _rewrite_address(
         )
     if peer_mode or "未称呼小爱音" in reasons or "未称呼soyorin" in reasons:
         call = "soyorin" if character == "anon" else "小爱音"
-        return extra + f"本轮是互聊，必须出现「{call}」，但禁止「{call}，」当抬头。"
+        return extra + (
+            f"本轮是互聊。若要点名，把「{call}」塞进句子中间或末尾，"
+            f"禁止「{call}，」起手当抬头。上一句已经叫过就用「你」接，不必每轮点名。"
+        )
     if any("Phone禁括号" in r or r.startswith("括号过长") for r in reasons):
         return extra + (
-            "去掉所有 ()【】（）动作/神态括号；Phone 用 emoji 或纯文字暗示；"
-            "F2F 若保留动作则单段≤6字且勿心理独白。只输出正文。\n"
+            "去掉动作/神态括号；Phone 用 emoji 或纯文字暗示；"
+            "F2F 动作括号单段≤6字。不要把另一人的固定收口写进这条回复。只输出正文。\n"
         )
     if any(r in _NAME_VIOLATIONS for r in reasons):
         return extra + (
@@ -361,7 +610,7 @@ def _compact_len(text: str) -> int:
 def looks_like_question(text: str) -> bool:
     """提问语气：没有问号也算（会不会 / 什么呢 / 对吧 / 吗）。
 
-    不把爱音式兴奋标点（！？/？！）、叠问「在哪在哪」当成对群友的问答体。
+    不把爱音式兴奋标点（！？/？！）、叠问「在哪在哪」当成对外人的问答体。
     """
     t = (text or "").strip()
     if not t:
@@ -379,7 +628,7 @@ def looks_like_question(text: str) -> bool:
         return True
     if re.search(r"(怎么了|为什么|为啥)([。.!！…\s]|$)", t):
         return True
-    if re.search(r"(会不会|要不要|是不是|能不能|好不好|行不行)", t):
+    if re.search(r"(会不会|要不要|是不是|能不能|好不好|行不行)", _PANIC_REDUP_RE.sub("", t)):
         return True
     if re.search(r"(什么呢|什么啊|啥呢|看到什么|发了什么|都有什么)", t):
         return True
@@ -399,25 +648,52 @@ def looks_like_question(text: str) -> bool:
     return False
 
 
+def _account_leak_hits(text: str, user_text: str = "") -> List[str]:
+    """拦截把账号/编号念出来。用户原文里出现过的数字放过。"""
+    raw = text or ""
+    raw = re.sub(r"\b20\d{2}\b", "", raw)
+    src = user_text or ""
+    if re.search(r"(?:QQ|qq|群号)\s*[：:=]?\s*\d{5,}", raw):
+        return ["账号编号外泄"]
+    for m in re.finditer(r"\b\d{8,11}\b", raw):
+        if m.group(0) in src:
+            continue
+        return ["账号编号外泄"]
+    return []
+
+
+def looks_peer_distress_cue(text: str) -> bool:
+    """有人在描述同伴跑开/哭/不要你了：这是场面，不是向外答题。"""
+    return bool(_PEER_DISTRESS_RE.search(text or ""))
+
+
+def scrub_truncated_tail(text: str) -> str:
+    """清掉生成中断残渣：谁说的！s / ……好。a"""
+    out = re.sub(r"([。！!…])\s*[A-Za-z]\s*$", r"\1", text or "")
+    return out.strip()
+
+
 def _ask_hits(text: str) -> List[str]:
     raw = text or ""
     if re.search(r"哪有|才不是|谁要啊", raw):
         return []
+    # 诶？/哈？ 是爱音惊叹口癖，不是在问群友。
+    raw_n = _VOICE_Q_TIC_RE.sub("", raw)
     # 纯兴奋叠问：在哪在哪——！
-    if re.search(r"(在哪在哪|哪里哪里)", raw) and not re.search(
-        r"快说|哪家|告诉我|吗([。.!！…\s]|$)", raw
+    if re.search(r"(在哪在哪|哪里哪里)", raw_n) and not re.search(
+        r"快说|哪家|告诉我|吗([。.!！…\s]|$)", raw_n
     ):
         # 若整段几乎只有兴奋句，不记提问
         stripped = re.sub(
             r"(在哪在哪|哪里哪里)[—\-！!。.…\s]*",
             "",
-            re.sub(r"[！!][？?]|[？?][！!]", "", raw),
+            re.sub(r"[！!][？?]|[？?][！!]", "", raw_n),
         )
         stripped = re.sub(r"[\s…]+", "", stripped)
         if len(stripped) <= 12 and not re.search(r"[？?吗]", stripped):
             return []
     hits: List[str] = []
-    t_chk = re.sub(r"[！!][？?]|[？?][！!]", "", raw)
+    t_chk = re.sub(r"[！!][？?]|[？?][！!]", "", raw_n)
     if re.search(r"[？?]", t_chk):
         hits.append("提问句")
     if re.search(r"吗([。.!！…\s]|$)", raw):
@@ -426,7 +702,7 @@ def _ask_hits(text: str) -> List[str]:
         hits.append("求证提问")
     if re.search(r"真的假的[吗啊呢]", raw):
         hits.append("求证提问")
-    if re.search(r"(会不会|要不要|是不是|能不能|好不好|行不行)", raw):
+    if re.search(r"(会不会|要不要|是不是|能不能|好不好|行不行)", _PANIC_REDUP_RE.sub("", raw)):
         hits.append("提问句")
     if re.search(r"(什么呢|什么啊|啥呢|看到什么|发了什么|都有什么|还能有什么|还有什么)", raw):
         hits.append("提问句")
@@ -465,18 +741,32 @@ def trigger_source_text(prompt: Optional[List[LLMChatMessage]] = None, fallback:
     return (m.group(1) if m else blob).strip()
 
 
-def salvage_non_ask_reply(text: str) -> Optional[str]:
+def salvage_non_ask_reply(text: str, original: str = "") -> Optional[str]:
     """重写仍脏时：尽量保留不含提问的分句，避免发出空洞兜底。"""
     raw = (text or "").strip()
+    src = (original or raw).strip()
     if not raw:
         return None
+
+    def _parts(blob: str) -> List[str]:
+        bits = []
+        for p in re.split(r"(?<=[。！!？?\n])\s*", blob or ""):
+            bit = (p or "").strip()
+            if bit:
+                bits.append(bit)
+        return bits
+
+    # 同伴哭/跑的场面：优先留「去看/追上」，不要只剩嫌麻烦。
+    if _CARE_CLAUSE_RE.search(src) or looks_peer_distress_cue(src):
+        care = [b for b in _parts(src) if _CARE_CLAUSE_RE.search(b) and not _ask_hits(b)]
+        if care:
+            out = "".join(care).strip()
+            if out and not _COLD_CLAUSE_RE.search(out):
+                return out
+
     # 按断句切；保留不含提问的片段
-    parts = re.split(r"(?<=[。！!？?\n])\s*", raw)
     kept: List[str] = []
-    for p in parts:
-        bit = (p or "").strip()
-        if not bit:
-            continue
+    for bit in _parts(raw):
         if _ask_hits(bit):
             continue
         kept.append(bit)
@@ -486,9 +776,13 @@ def salvage_non_ask_reply(text: str) -> Optional[str]:
         cleaned = re.sub(r"[？?]+", "！", cleaned).strip()
         cleaned = re.sub(r"\s+", " ", cleaned)
         if cleaned and not _ask_hits(cleaned) and len(re.sub(r"\s+", "", cleaned)) >= 2:
+            if _COLD_CLAUSE_RE.search(cleaned) and _CARE_CLAUSE_RE.search(src):
+                return None
             return cleaned
         return None
     out = "".join(kept).strip()
+    if _COLD_CLAUSE_RE.search(out) and _CARE_CLAUSE_RE.search(src) and not _CARE_CLAUSE_RE.search(out):
+        return None
     if out and not _ask_hits(out):
         return out
     return None
@@ -547,9 +841,13 @@ def _trigger_qa_hits(text: str, user_text: str = "", allow_ask: bool = False) ->
     for pattern, label in _QA_BODY_RULES:
         if not pattern.search(raw):
             continue
-        if label == "复读选择问" and allow_ask:
-            if not (user_text and pattern.search(user_text)):
+        if label == "复读选择问":
+            # 不行不行 = 着急叠词，里面碰巧含「行不行」
+            if not pattern.search(_PANIC_REDUP_RE.sub("", raw)):
                 continue
+            if allow_ask:
+                if not (user_text and pattern.search(user_text)):
+                    continue
         hits.append(label)
     for pattern, label in _QA_LEAD_RULES:
         if pattern.search(lead) or pattern.search(raw.strip()):
@@ -611,6 +909,7 @@ def find_anon_violations(
     user_text: str = "",
     allow_ask: bool = False,
     topic_idle: bool = False,
+    peer_mode: bool = False,
 ) -> List[str]:
     """爱音回复：合法 soyorin 不算「soyo」；拦截素世/素世酱等。"""
     hits: List[str] = []
@@ -629,6 +928,8 @@ def find_anon_violations(
             hits.append(label)
     hits.extend(_secretary_hits("anon", text))
     hits.extend(_ai_paragraph_hits(text))
+    hits.extend(markdown_hits(text))
+    hits.extend(_account_leak_hits(text, user_text))
     if env_peer_mode:
         hits.extend(_env_hits(text, allow_peer_address=True))
         if topic_idle:
@@ -640,8 +941,13 @@ def find_anon_violations(
         if topic_idle:
             hits.extend(_idle_pivot_hits("anon", text))
     if require_address and _compact_len(text) >= 12:
-        if not re.search(r"(?i)soyorin", text or ""):
+        # 互聊里「你」已经对着同伴，不要为了塞名字把 soyorin 写成第三人称。
+        if not _uses_second_person(text) and not re.search(
+            r"(?i)soyorin", text or ""
+        ):
             hits.append("未称呼soyorin")
+    if peer_mode and _YOU_VS_SOYORIN_RE.search(text or ""):
+        hits.append("把soyorin当第三人称")
     if trigger_mode:
         hits.extend(_trigger_qa_hits(text, user_text, allow_ask=allow_ask))
         hits.extend(_third_person_peer_hits("anon", text))
@@ -649,6 +955,14 @@ def find_anon_violations(
         for pattern, label in _ANON_FACT_QA:
             if pattern.search(lead):
                 hits.append(label)
+        if looks_peer_distress_cue(user_text) and (
+            re.search(
+                r"(算了.{0,16}明天|反正明天就能|麻烦死了|又不差这一会儿|追什么追)",
+                text or "",
+            )
+            or _SHOE_EXCUSE_RE.search(text or "")
+        ):
+            hits.append("危急却收束")
     return _uniq(hits)
 
 
@@ -662,8 +976,10 @@ def find_character_violations(
     user_text: str = "",
     allow_ask: bool = False,
     topic_idle: bool = False,
+    require_address: Optional[bool] = None,
 ) -> List[str]:
-    require_address = bool(peer_mode)
+    if require_address is None:
+        require_address = bool(peer_mode)
     if character == "anon":
         return find_anon_violations(
             text,
@@ -674,6 +990,7 @@ def find_character_violations(
             user_text=user_text,
             allow_ask=allow_ask or peer_mode or env_peer_mode,
             topic_idle=topic_idle,
+            peer_mode=peer_mode,
         )
     if character == "soyo":
         return find_soyo_violations(
@@ -685,6 +1002,7 @@ def find_character_violations(
             user_text=user_text,
             allow_ask=allow_ask or peer_mode or env_peer_mode,
             topic_idle=topic_idle,
+            peer_mode=peer_mode,
         )
     return []
 
@@ -698,6 +1016,7 @@ def find_soyo_violations(
     user_text: str = "",
     allow_ask: bool = False,
     topic_idle: bool = False,
+    peer_mode: bool = False,
 ) -> List[str]:
     """返回命中的违规标签；合法「小爱音」不会被算作「爱音」。"""
     hits: List[str] = []
@@ -712,6 +1031,10 @@ def find_soyo_violations(
             hits.append(label)
     hits.extend(_secretary_hits("soyo", text))
     hits.extend(_ai_paragraph_hits(text))
+    hits.extend(markdown_hits(text))
+    hits.extend(_account_leak_hits(text, user_text))
+    if re.search(r"小爱音[…。.\s]{0,8}你说[，,]?\s*是不是", text or ""):
+        hits.append("公式转进")
     if env_peer_mode:
         hits.extend(_env_hits(text, allow_peer_address=True))
         if topic_idle:
@@ -723,8 +1046,15 @@ def find_soyo_violations(
         if topic_idle:
             hits.extend(_idle_pivot_hits("soyo", text))
     if require_address and _compact_len(text) >= 12:
-        if "小爱音" not in (text or ""):
+        if not _uses_second_person(text) and "小爱音" not in (text or ""):
             hits.append("未称呼小爱音")
+    if peer_mode and (
+        looks_chase_in_flight(user_text) or looks_peer_distress_cue(user_text)
+    ):
+        if _CHASER_CLAIM_RE.search(text or "") or re.search(
+            r"^(也好|嗯，追到了)", (text or "").strip()
+        ):
+            hits.append("被追却去追")
     if trigger_mode:
         hits.extend(_trigger_qa_hits(text, user_text, allow_ask=allow_ask))
         hits.extend(_third_person_peer_hits("soyo", text))
@@ -758,6 +1088,7 @@ def retry_rewrite(
     env_mode: bool = False,
     env_peer_mode: bool = False,
     dirty_text: str = "",
+    user_text: str = "",
 ) -> Optional[LLMChatResponse]:
     """轻量重写：只送角色短设定 + 脏回复，避免把整段 5k+ prompt 再烧一遍。"""
     mid = (model_id or "").strip()
@@ -776,9 +1107,9 @@ def retry_rewrite(
         return None
 
     voice = (
-        "你是千早爱音。碎、快、可抢话。只输出一句短微信正文。"
+        "你是千早爱音。碎、快、先惊、可抢话、可 Anyway。不要端茶，不要软声圆场，不要复读同伴收口。只输出一句短微信正文。"
         if character == "anon"
-        else "你是长崎素世。淡、短、可懒。只输出一句短微信正文。"
+        else "你是长崎素世。软、先应再讲，意思放后半句。禁止爱音腔：诶？、真的假的、走啊现在、Anyway、碎句感叹号。只输出一句短微信正文。"
     )
     src = (dirty_text or "").strip()
     if not src:
@@ -802,6 +1133,14 @@ def retry_rewrite(
         env_mode=env_mode,
         env_peer_mode=env_peer_mode,
     )
+    cue = (user_text or "").strip()
+    cue_line = f"对方刚说：{cue[:80]}\n" if cue else ""
+    keep = ""
+    if looks_peer_distress_cue(cue) or _CARE_CLAUSE_RE.search(src):
+        keep = (
+            "原文里若在追、去看、担心同伴，必须留下这个方向；"
+            "禁止改成嫌麻烦、算了明天见、鞋带搞定就完了。提问改陈述，情绪不能反。"
+        )
     retry_prompt = [
         LLMChatMessage(
             role="system",
@@ -814,7 +1153,9 @@ def retry_rewrite(
                     text=(
                         f"违规：{'、'.join(reasons)}\n"
                         f"{address}"
+                        f"{cue_line}"
                         f"原文：{src}\n"
+                        f"{keep}"
                         "整段重写。禁止问答体、禁止提及提问者、禁止导演复盘。"
                         "不要动作说明书。只输出正文，不要解释。"
                     )

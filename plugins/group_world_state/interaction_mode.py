@@ -107,7 +107,7 @@ def phone_toggle_notice(character: str, toggled_to: str) -> str:
         )
     return (
         "[SYSTEM: interaction_mode=face]\n"
-        "对方切回当面/普通群聊语境。用角色正常当面口吻短回即可，不要解释模式。\n"
+        "对方切回当面语境。用角色正常当面口吻短回即可，不要解释模式。\n"
     )
 
 
