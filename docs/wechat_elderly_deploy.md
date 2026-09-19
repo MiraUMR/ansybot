@@ -62,7 +62,7 @@ docker compose logs -f kirara-wechat-elderly
 
 ### 第三步：访问 WebUI 完成配置
 
-浏览器打开 `http://38.22.235.136:8081`（或通过 nginx 反代），用 `wechat_elderly.env` 中的 `KIRARA_ADMIN_TOKEN` 登录。
+浏览器打开 `http://<SERVER_IP>:8081`（或通过 nginx 反代），用 `wechat_elderly.env` 中的 `KIRARA_ADMIN_TOKEN` 登录。
 
 需要在 WebUI 中完成：
 - **适配器配置**：添加微信适配器（见第 3 节），命名为 `wechat_elderly`
@@ -122,7 +122,7 @@ docker compose logs -f wechatpadpro   # 确认无报错
 
 ```bash
 # 获取登录二维码（返回 base64 图片和 uuid）
-curl -s http://38.22.235.136:8059/api/login/qr/newx \
+curl -s http://<SERVER_IP>:8059/api/login/qr/newx \
   -H "Content-Type: application/json" \
   -H "X-Access-Token: ${WX_PADPRO_ADMIN_KEY}" \
   -d '{"deviceName": "iPad", "deviceId": "wx-elderly-bot-001"}' | python3 -m json.tool
@@ -146,7 +146,7 @@ curl -s http://38.22.235.136:8059/api/login/qr/newx \
 
 ```bash
 # 轮询登录结果（uuid 替换为上一步返回的 uuid）
-curl -s "http://38.22.235.136:8059/api/login/CheckLoginStatus?key=abc123def456" \
+curl -s "http://<SERVER_IP>:8059/api/login/CheckLoginStatus?key=abc123def456" \
   -H "X-Access-Token: ${WX_PADPRO_ADMIN_KEY}" | python3 -m json.tool
 ```
 
@@ -156,7 +156,7 @@ curl -s "http://38.22.235.136:8059/api/login/CheckLoginStatus?key=abc123def456" 
 
 ### 3.3 在 Kirara WebUI 中配置适配器
 
-登录 `http://38.22.235.136:8081`，进入「IM 适配器」→「添加适配器」：
+登录 `http://<SERVER_IP>:8081`，进入「IM 适配器」→「添加适配器」：
 
 ```
 适配器类型: WeChatPadPro 个人微信
@@ -191,7 +191,7 @@ Webhook 签名密钥: <与 wechat_elderly.env 中 WX_WEBHOOK_SECRET 一致>
 
 ## 5. Kirara WebUI 配置
 
-登录 `http://38.22.235.136:8081` 后，需手动完成以下配置：
+登录 `http://<SERVER_IP>:8081` 后，需手动完成以下配置：
 
 ### 5.1 人设配置
 

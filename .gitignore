@@ -61,6 +61,7 @@ scripts/_tmp_*
 # Login QR codes (session material, not source)
 *_qr.png
 *login_qr.png
+local_secrets*.zip
 
 # IDE / OS
 .idea/

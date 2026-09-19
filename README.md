@@ -36,7 +36,7 @@
 2. 双击 `启动.cmd`  
    看到 `WebUI 管理平台本地访问地址：http://127.0.0.1:8080` 即表示启动成功。
 3. 浏览器打开管理后台：
-   - 云服务器：<https://ansy.love/qqbot/>（独立前缀，不占用网站 `/`、`/api/`）
+   - 云服务器：`<PUBLIC_BASE_URL>/qqbot/`（独立前缀，不占用网站 `/`、`/api/`）
    - 本机调试：<http://127.0.0.1:8080>
 
 更新版本：双击 `更新.cmd`（等价于 `pip install -U kirara-ai`，`data` 目录会保留）。
@@ -65,13 +65,13 @@
 - Webhook（填到 QQ 开放平台）：
 
 ```text
-https://ansy.love/im/webhook/qqbot/qqbot01/
+https://<PUBLIC_HOST>/im/webhook/qqbot/qqbot01/
 ```
 
 管理后台（与现有网站隔离）：
 
 ```text
-https://ansy.love/qqbot/
+https://<PUBLIC_HOST>/qqbot/
 ```
 
 旧机器人使用 **WebSocket**。Kirara 使用 **Webhook**。云上已通过 nginx 把 `/im/webhook/` 和 `/qqbot/` 反代到 Kirara，网站原来的 `/`、`/api/` 不变。
@@ -85,7 +85,7 @@ https://ansy.love/qqbot/
 
 监听地址已设为 `0.0.0.0:8080`。如果本机没有公网 IP，请用 Kirara 内置 frp、反向代理，或把服务部署到已备案的云服务器。
 
-群聊默认规则：被 @ 或消息以 `/chat` 开头会必回。未 @ 插话按群分开：`1035893116` 明确提到 MyGO 人物时约 5%，其它闲聊约 1%；`1071033510` 约 15%。近期聊天和长期关系都按群隔离。私聊会直接回复。可用 `/help`、`/清空记忆`、`/长期记忆`。
+群聊默认规则：被 @ 或消息以 `/chat` 开头会必回。未 @ 插话按群分开：主群明确提到相关人物时约 5%，其它闲聊约 1%；次群约 15%（具体群号写在本地 `data/dispatch_rules/rules.yaml`）。近期聊天和长期关系都按群隔离。私聊会直接回复。可用 `/help`、`/清空记忆`、`/长期记忆`。
 
 ### 3. NapCat 用户号（收全群消息）
 
@@ -93,10 +93,10 @@ https://ansy.love/qqbot/
 
 云上扫码登录：
 
-1. 打开 NapCat WebUI（token 见服务器 `/opt/kirara-ai/.env` 的 `WEBUI_TOKEN`）：
+1. 打开 NapCat WebUI（token 见部署机 `.env` 的 `WEBUI_TOKEN`）：
 
 ```text
-http://38.22.235.136:6099/webui
+http://<SERVER_IP>:6099/webui
 ```
 
 2. 用要当 bot 的 QQ 扫码。登录成功后把该号拉进目标群。
@@ -107,7 +107,7 @@ http://38.22.235.136:6099/webui
 扫码完成后如果 Kirara 仍未连上，在服务器执行：
 
 ```bash
-python3 /opt/kirara-ai/scripts/sync_napcat_onebot.py /opt/kirara-ai/napcat/config
+python3 <PROJECT_DIR>/scripts/sync_napcat_onebot.py <PROJECT_DIR>/napcat/config
 docker restart napcat-qq
 ```
 
@@ -124,7 +124,7 @@ docker restart napcat-qq
 /长期记忆 清空
 ```
 
-网页（先登录 WebUI）：侧边栏「长期设定」，或 <https://ansy.love/qqbot/world-state>  
+网页（先登录 WebUI）：侧边栏「长期设定」，或 `<PUBLIC_BASE_URL>/qqbot/world-state`  
 文件：`data/world_state/<群号>.yaml`，可选配置见 `data/world_state/_config.example.yaml`。
 
 `/清空记忆` 只清近期聊天，不会清长期设定。
