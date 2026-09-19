@@ -26,6 +26,8 @@ TTS_ROOT = Path(os.environ.get("TTS_ROOT", "/data/tts"))
 DEVICE = os.environ.get("TTS_DEVICE", "cpu:0")
 HOST = os.environ.get("TTS_HOST", "0.0.0.0")
 PORT = int(os.environ.get("TTS_PORT", "8020"))
+GPTSOVITS_URL = (os.environ.get("GPTSOVITS_URL") or "").rstrip("/")
+GPTSOVITS_SOCK = os.environ.get("GPTSOVITS_SOCK") or ""
 
 _rvc = None
 _rvc_lock = threading.Lock()
@@ -120,6 +122,44 @@ def _ffmpeg_wav(src: Path, dest: Path, sr: int = 40000) -> None:
         raise RuntimeError(proc.stderr[-400:] or "ffmpeg failed")
 
 
+def _proxy_gptsovits(speaker: str, text: str) -> tuple[bytes, str, str]:
+    import http.client
+    import socket
+    import urllib.request
+
+    payload = json.dumps({"character": speaker, "text": text}, ensure_ascii=False).encode("utf-8")
+    headers = {"Content-Type": "application/json", "User-Agent": "character-tts-proxy"}
+    if GPTSOVITS_SOCK:
+        conn = http.client.HTTPConnection("localhost", timeout=180)
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(180)
+        sock.connect(GPTSOVITS_SOCK)
+        conn.sock = sock
+        conn.request("POST", "/tts", body=payload, headers=headers)
+        resp = conn.getresponse()
+        data = resp.read()
+        status = resp.status
+        ctype = resp.getheader("Content-Type") or "audio/wav"
+        backend = resp.getheader("X-TTS-Backend") or "gptsovits"
+        conn.close()
+        if status != 200:
+            raise RuntimeError(f"gptsovits {status}: {data[:400]!r}")
+    else:
+        req = urllib.request.Request(
+            GPTSOVITS_URL + "/tts",
+            data=payload,
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            data = resp.read()
+            ctype = resp.headers.get("Content-Type") or "audio/wav"
+            backend = resp.headers.get("X-TTS-Backend") or "gptsovits"
+    if not data:
+        raise RuntimeError("gptsovits returned empty audio")
+    return data, backend, ctype
+
+
 def synthesize(speaker: str, text: str) -> tuple[bytes, str, str]:
     """Return (wav_bytes, backend, content_type)."""
     cfg = _speakers.get(speaker)
@@ -128,6 +168,8 @@ def synthesize(speaker: str, text: str) -> tuple[bytes, str, str]:
     text = (text or "").strip()
     if not text:
         raise ValueError("empty text")
+    if GPTSOVITS_SOCK or GPTSOVITS_URL:
+        return _proxy_gptsovits(speaker, text)
 
     with tempfile.TemporaryDirectory(prefix="tts-") as tmp:
         tmp_path = Path(tmp)
@@ -189,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
                     "speakers": sorted(_speakers),
                     "loaded": _current_speaker,
                     "device": DEVICE,
+                    "gptsovits": GPTSOVITS_URL or "",
+                    "gptsovits_sock": GPTSOVITS_SOCK or "",
                 },
             )
             return

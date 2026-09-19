@@ -17,6 +17,8 @@ from kirara_ai.ioc.container import DependencyContainer
 from kirara_ai.logger import get_logger
 from kirara_ai.workflow.core.block import Block, Input, Output, ParamMeta
 
+from .ja_phrases import clip_to_japanese, first_voice_clip, normalize_ja_for_tts
+
 try:
     from kirara_ai.media.manager import MediaManager
 except Exception:  # pragma: no cover
@@ -49,6 +51,8 @@ def _load_config() -> dict:
         "keep_text": bool(cfg.get("keep_text", True)),
         "max_chars": int(cfg.get("max_chars") or 180),
         "min_chars": int(cfg.get("min_chars") or 1),
+        "convert_ja": bool(cfg.get("convert_ja", False)),
+        "max_sentences": int(cfg.get("max_sentences") or 1),
     }
 
 
@@ -61,16 +65,99 @@ def _clean_text(text: str) -> str:
     return t
 
 
-def _spoken_from(msg: IMMessage, max_chars: int) -> str:
-    chunks: List[str] = []
+def _light_clean(text: str) -> str:
+    t = (text or "").replace("\r", "\n")
+    t = _PLACEHOLDER.sub(" ", t)
+    t = _INNER.sub(" ", t)
+    t = t.replace("<break>", "\n")
+    t = re.sub(r"[ \t]+", " ", t)
+    return t.strip()
+
+
+def _first_utterance(msg: IMMessage, max_chars: int) -> str:
     for el in list(getattr(msg, "message_elements", None) or []):
-        if isinstance(el, TextMessage):
-            piece = _clean_text(getattr(el, "text", "") or "")
-            if piece and not _SKIP_ONLY.match(piece):
-                chunks.append(piece)
-    spoken = "。".join(chunks).strip("。").strip()
-    if len(spoken) > max_chars:
-        spoken = spoken[:max_chars].rsplit("。", 1)[0] or spoken[:max_chars]
+        if not isinstance(el, TextMessage):
+            continue
+        piece = _light_clean(getattr(el, "text", "") or "")
+        if piece and not _SKIP_ONLY.match(piece.replace("\n", "")):
+            if len(piece) > max_chars:
+                piece = piece[:max_chars]
+            return piece
+    return ""
+
+
+def _looks_ja(text: str) -> bool:
+    return bool(re.search(r"[\u3040-\u30ff]", text or ""))
+
+
+_JA_SYS = {
+    "anon": (
+        "把下面这句中文口语译成自然日文短句。"
+        "必须保留原文里的具体事物（店、食物、人名、地点），不要概括成别的意思。"
+        "不要添加原文没有的 え、マジ、なにそれ。"
+        "只输出一行日文（假名+常用汉字），不要中文简体，不要解释，不要引号。"
+    ),
+    "soyo": (
+        "把下面这句中文口语译成自然日文短句。"
+        "必须保留原文里的具体事物（店、食物、人名、地点），不要概括成别的意思。"
+        "不要添加原文没有的语气词。"
+        "只输出一行日文（假名+常用汉字），不要中文简体，不要解释，不要引号。"
+    ),
+}
+
+
+def _llm_to_ja(container: DependencyContainer, character: str, clip: str) -> str:
+    try:
+        from kirara_ai.llm.format.message import LLMChatMessage, LLMChatTextContent
+        from kirara_ai.llm.format.request import LLMChatRequest
+        from kirara_ai.llm.llm_manager import LLMManager
+    except Exception as exc:
+        logger.warning(f"tts ja import failed: {exc}")
+        return ""
+    try:
+        manager = container.resolve(LLMManager)
+        cfg = getattr(manager, "config", None)
+        mid = str(getattr(getattr(cfg, "defaults", None), "llm_model", "") or "").strip()
+        llm = manager.get_llm(mid) if mid else None
+        if not llm:
+            return ""
+        prompt = [
+            LLMChatMessage(
+                role="system",
+                content=[LLMChatTextContent(text=_JA_SYS.get(character) or _JA_SYS["anon"])],
+            ),
+            LLMChatMessage(
+                role="user",
+                content=[LLMChatTextContent(text=f"原文：{clip}")],
+            ),
+        ]
+        # Kirara 的 LLMChatRequest.temperature 只要整数；翻译用默认温度即可。
+        try:
+            req = LLMChatRequest(messages=prompt, model=mid, max_tokens=80)
+        except Exception:
+            req = LLMChatRequest(messages=prompt, model=mid)
+        resp = llm.chat(req)
+        text = ""
+        msg = getattr(resp, "message", None)
+        for part in getattr(msg, "content", None) or []:
+            text += getattr(part, "text", None) or ""
+        text = (text or "").strip().strip("\"'`")
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:\w+)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text).strip()
+        return text.splitlines()[0].strip() if text else ""
+    except Exception as exc:
+        logger.warning(f"tts ja llm failed: {exc}")
+        return ""
+
+
+def _to_spoken_ja(container: DependencyContainer, character: str, clip: str) -> str:
+    spoken = clip_to_japanese(clip, character)
+    if not _looks_ja(spoken):
+        spoken = _llm_to_ja(container, character, clip)
+    spoken = normalize_ja_for_tts(spoken)
+    if not _looks_ja(spoken):
+        return ""
     return spoken
 
 
@@ -139,23 +226,36 @@ class AttachCharacterVoice(Block):
 
     def execute(self, msg: IMMessage) -> Dict[str, Any]:
         cfg = _load_config()
-        if not cfg["enabled"] or msg is None:
+        if msg is None:
             return {"msg": msg}
-        spoken = _spoken_from(msg, cfg["max_chars"])
-        if len(spoken) < cfg["min_chars"]:
+        if not cfg["enabled"]:
+            logger.info("skip voice: disabled or missing CHARACTER_TTS_URL")
+            return {"msg": msg}
+        raw = _first_utterance(msg, cfg["max_chars"])
+        clip = first_voice_clip(raw)
+        if len(clip) < cfg["min_chars"]:
+            logger.info(f"skip voice character={self.character} reason=empty clip raw={raw!r}")
+            return {"msg": msg}
+        spoken = _to_spoken_ja(self.container, self.character, clip)
+        if not spoken:
+            logger.info(f"skip voice character={self.character} reason=no_ja clip={clip!r}")
             return {"msg": msg}
         audio = _tts(cfg["api_url"], self.character, spoken, cfg["timeout"])
         if not audio:
+            logger.warning(
+                f"skip voice character={self.character} reason=tts_fail ja={spoken!r} clip={clip!r}"
+            )
             return {"msg": msg}
         voice = _voice_element(audio, self.character, self.container)
         if voice is None:
+            logger.warning(f"skip voice character={self.character} reason=voice_init ja={spoken!r}")
             return {"msg": msg}
         elements = list(msg.message_elements or [])
         if not cfg["keep_text"]:
             elements = [el for el in elements if not isinstance(el, TextMessage)]
         elements.append(voice)
         logger.info(
-            f"attached voice character={self.character} bytes={len(audio)} chars={len(spoken)}"
+            f"attached voice character={self.character} bytes={len(audio)} clip={clip!r} ja={spoken!r}"
         )
         return {
             "msg": IMMessage(

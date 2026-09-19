@@ -2,7 +2,10 @@
 # 模型文件在 models/，不进 git；用 scripts/download_character_rvc.py 拉取。
 enabled: true
 api_url: http://character-tts:8020
-timeout_seconds: 90
+timeout_seconds: 120
 keep_text: true
 max_chars: 180
 min_chars: 1
+# 本轮第一条按语义切开，译成日文后再送 GPT-SoVITS
+convert_ja: true
+max_sentences: 1

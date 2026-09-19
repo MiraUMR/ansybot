@@ -1174,7 +1174,9 @@ class GateMemoryByMode(Block):
             return {"memory_content": []}
         if memory_content is None:
             return {"memory_content": []}
-        return {"memory_content": memory_content}
+        from .day_rollover import keep_today_memory
+
+        return {"memory_content": keep_today_memory(memory_content)}
 
 
 MENTION_CHANCE = 0.12

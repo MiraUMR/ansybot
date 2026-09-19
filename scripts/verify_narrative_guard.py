@@ -71,6 +71,7 @@ check("soyo workflow 含故事收束例外", "若本轮是故事模式" in yaml.
 check("anon workflow 含故事收束例外", "若本轮是故事模式" in yaml.safe_dump(ANON_WF, allow_unicode=True))
 check("回复规则不再默认直接接话", "默认直接接话" not in yaml.safe_dump(WF, allow_unicode=True) and "默认直接接话" not in yaml.safe_dump(ANON_WF, allow_unicode=True))
 check("回复规则改模式分流", "模式分流" in yaml.safe_dump(WF, allow_unicode=True) and "模式分流" in yaml.safe_dump(ANON_WF, allow_unicode=True))
+check("自然日翻篇写入当场上下文", "跨过自然日的闲聊" in yaml.safe_dump(WF, allow_unicode=True) and "跨过自然日的闲聊" in yaml.safe_dump(ANON_WF, allow_unicode=True))
 check("P0 作废默认直接接话", "默认直接接话/先回应对方" in GUARD)
 
 # --- 模块文本 ---

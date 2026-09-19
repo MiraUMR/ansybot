@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Union
 
 from kirara_ai.im.message import IMMessage, MediaMessage, TextMessage
@@ -34,6 +34,26 @@ def _format_media_line(media_id: str, desc: Optional[str]) -> str:
             cleaned = cleaned[:36] + "…"
         return f"[图片: {cleaned}]\n"
     return "[图片]\n"
+
+
+_CST = timezone(timedelta(hours=8))
+
+
+def _is_same_civil_day(ts: Optional[datetime], now: Optional[datetime] = None) -> bool:
+    """东八区自然日：昨天的记忆不进今天的提示词。"""
+    if ts is None:
+        return True
+    now = now or datetime.now(_CST)
+    if now.tzinfo is None:
+        today = now.date()
+    else:
+        today = now.astimezone(_CST).date()
+    day = ts.date() if ts.tzinfo is None else ts.astimezone(_CST).date()
+    return day == today
+
+
+def _today_memory_entries(entries: List[MemoryEntry]) -> List[MemoryEntry]:
+    return [e for e in (entries or []) if _is_same_civil_day(getattr(e, "timestamp", None))]
 
 
 class DefaultMemoryComposer(MemoryComposer):
@@ -82,9 +102,12 @@ class DefaultMemoryDecomposer(MemoryDecomposer):
         if len(entries) == 0:
             return [self.empty_message]
 
-        # 7秒前，<记忆内容>
+        # 只注入当天记录；跨自然日的闲聊已经翻篇。
+        today_entries = _today_memory_entries(entries)[-10:]
+        if not today_entries:
+            return [self.empty_message]
         memory_texts: List[ComposableMessageType] = []
-        for entry in entries[-10:]:
+        for entry in today_entries:
             time_diff = datetime.now() - entry.timestamp
             time_str = self.get_time_str(time_diff)
             memory_texts.append(f"{time_str}，{entry.content}")
@@ -118,7 +141,7 @@ class MultiElementDecomposer(MemoryDecomposer):
     
     def decompose(self, entries: List[MemoryEntry]) -> List[LLMChatMessage]:
         decomposed_messages = []
-        for entry in entries:
+        for entry in _today_memory_entries(entries):
             # 首先判断MemoryEntry的内容是否包含"你回答:"
             if "你回答:" in entry.content:
                 # 如果包含，则分割MemoryEntry的内容为用户消息和AI回答

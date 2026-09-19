@@ -1,6 +1,6 @@
 import re
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
@@ -22,6 +22,15 @@ from kirara_ai.media.manager import MediaManager
 from kirara_ai.memory.composes.base import ComposableMessageType
 from kirara_ai.workflow.core.block import Block, Input, Output, ParamMeta
 from kirara_ai.workflow.core.execution.executor import WorkflowExecutor
+
+_CST = timezone(timedelta(hours=8))
+_WEEKDAYS = "一二三四五六日"
+
+
+def _now_clock() -> str:
+    now = datetime.now(_CST)
+    return now.strftime("%Y-%m-%d %H:%M:%S") + f" 周{_WEEKDAYS[now.weekday()]}"
+
 
 _VISION_CONTEXT_HINT = (
     "\n\n（对方发了图片。先看清这一张里实际有什么，再按这一张反应。"
@@ -477,7 +486,7 @@ class ChatMessageConstructor(Block):
         if not target or (target.isdigit() and len(target) >= 5):
             target = "眼前的人"
         replacements = {
-            "{current_date_time}": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "{current_date_time}": _now_clock(),
             "{user_msg}": user_msg.content,
             "{user_name}": speaker,
             "{user_id}": "",

@@ -195,11 +195,13 @@ class WorldStateStore:
         return items
 
     def render(self, scope: str) -> str:
+        from .day_rollover import render_fact_sections
+
         doc = self.get(scope)
         facts = doc.get("facts") or []
         if not facts:
             return empty_text_for(scope)
-        lines = []
+        visible = []
         for fact in facts:
             # Dream / fantasy story memories stay out of daily prompt injection.
             source = str(fact.get("source") or "")
@@ -210,10 +212,10 @@ class WorldStateStore:
             if text.startswith("[dream]"):
                 continue
             if text:
-                lines.append(f"- {key}: {text}")
-        if not lines:
+                visible.append(fact)
+        if not visible:
             return empty_text_for(scope)
-        return "【本群已经发生、必须当作既定事实】\n" + "\n".join(lines)
+        return render_fact_sections(visible, empty_text_for(scope))
 
     def set_fact(
         self,

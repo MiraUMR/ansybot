@@ -1,13 +1,6 @@
 id: soyo
 display: 长崎素世
-# 后端：硅基流动 CosyVoice2。参考音频由 scripts/sf_tts.py make-ref 合成后上传，
-# 得到 voice_uri 后所有回复都用它，音色才不会每次漂。
-preset_voice: claire
-ref_instruct: 用十六岁女生的声音说，柔和偏低，气声多，情绪平静自然，连贯不要停顿
-ref_text: 嗯，也不是不行，你啊，总是这样，真拿你没办法，先这样吧，我有点困了。
-ref_speed: 1.0
-ref_gain: 0.0
-say_instruct: 语速偏慢，柔和平静，气声多，像女高中生在手机上小声讲话
-speed: 0.92
-gain: 0.0
-voice_uri: ""
+backend: gptsovits-v2pro
+ref_wav: E:/mygo-gptsovits/ref/soyo.wav
+prompt_text: 最初はみんなで選んだノートをプレゼントしようって話だったんだけどね
+speed: 1.0

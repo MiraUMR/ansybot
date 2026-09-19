@@ -11,6 +11,8 @@ from typing import Deque, Dict, List, Optional
 
 import yaml
 
+from .day_rollover import is_same_civil_day
+
 CST = timezone(timedelta(hours=8))
 
 
@@ -113,11 +115,26 @@ class SceneContextStore:
                     source=(source or "template").strip() or "template",
                 )
             )
+            items = self._today_only(items)
+            self._cache[self._scope_key(character, group_id)] = items
             self._save(character, group_id, items)
+
+    def _today_only(self, items: Deque[SceneEntry]) -> Deque[SceneEntry]:
+        kept = [e for e in items if is_same_civil_day(e.ts)]
+        out: Deque[SceneEntry] = deque(kept, maxlen=self.maxlen)
+        return out
 
     def entries(self, character: str, group_id: str) -> List[SceneEntry]:
         with self._lock:
-            return list(self._load(character, group_id))
+            items = self._load(character, group_id)
+            pruned = self._today_only(items)
+            key = self._scope_key(character, group_id)
+            if len(pruned) != len(items):
+                self._cache[key] = pruned
+                self._save(character, group_id, pruned)
+            else:
+                self._cache[key] = pruned
+            return list(pruned)
 
     def render_xml(self, character: str, group_id: str) -> str:
         rows = self.entries(character, group_id)
