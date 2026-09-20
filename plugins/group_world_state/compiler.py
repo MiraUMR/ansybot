@@ -253,7 +253,7 @@ def build_outsider_block(doc: Dict[str, Any]) -> str:
             lines = [image]
     if not lines:
         return ""
-    aside = "内心用本人节奏，一拍就完，不要学同伴。每轮最多一句。"
+    aside = "内心只用（），一拍就完，不要学同伴，不要写成「」语录。每轮最多一句。"
     body = "\n".join(f"- {_xml(row)}" for row in lines[:4])
     return (
         "<outsider>\n"

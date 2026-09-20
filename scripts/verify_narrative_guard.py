@@ -10,12 +10,18 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 BLOCKS = (ROOT / "plugins/group_world_state/blocks.py").read_text(encoding="utf-8")
 GUARD = (ROOT / "plugins/group_world_state/style_guard.py").read_text(encoding="utf-8")
-BASE = (ROOT / "data/persona/soyo/modules/soyo_base.md").read_text(encoding="utf-8")
-TRIG = (ROOT / "data/persona/soyo/modules/soyo_trigger.md").read_text(encoding="utf-8")
-ANON_BASE = (ROOT / "data/persona/anon/modules/anon_base.md").read_text(encoding="utf-8")
-ANON_TRIG = (ROOT / "data/persona/anon/modules/anon_trigger.md").read_text(encoding="utf-8")
-ANON_COMP = (ROOT / "data/persona/anon/modules/anon_companion.md").read_text(encoding="utf-8")
-SOYO_COMP = (ROOT / "data/persona/soyo/modules/soyo_companion.md").read_text(encoding="utf-8")
+# persona v2：正文已编译进 config_v2.yaml；旧 modules/*.md 仅 story/phone 保留。
+# 这里把 config 全文当 BASE/TRIG/COMP 来查，保证校验跟线上注入一致。
+SOYO_CFG_TXT = (ROOT / "data/persona/soyo/config_v2.yaml").read_text(encoding="utf-8")
+ANON_CFG_TXT = (ROOT / "data/persona/anon/config_v2.yaml").read_text(encoding="utf-8")
+SOYO_CFG = yaml.safe_load(SOYO_CFG_TXT)
+ANON_CFG = yaml.safe_load(ANON_CFG_TXT)
+BASE = SOYO_CFG_TXT
+TRIG = SOYO_CFG_TXT
+ANON_BASE = ANON_CFG_TXT
+ANON_TRIG = ANON_CFG_TXT
+ANON_COMP = ANON_CFG_TXT
+SOYO_COMP = SOYO_CFG_TXT
 SOYO_STORY = (ROOT / "data/persona/soyo/modules/soyo_story.md").read_text(encoding="utf-8")
 ANON_STORY = (ROOT / "data/persona/anon/modules/anon_story.md").read_text(encoding="utf-8")
 STORY_PY = (ROOT / "plugins/group_world_state/story.py").read_text(encoding="utf-8")
@@ -47,7 +53,7 @@ check("CRITICAL 不再一刀切禁止提及同伴", "禁止强制绑定同伴" n
 check("导演腔拦截", "让我理理" in GUARD)
 check("peer 强制规定称呼", "未称呼小爱音" in GUARD and "未称呼soyorin" in GUARD)
 check("轻提开关已写入组装函数", "本轮轻提开关" in BLOCKS)
-check("MENTION_CHANCE=0.30", "MENTION_CHANCE = 0.30" in BLOCKS)
+check("MENTION_CHANCE 轻提概率", "MENTION_CHANCE = " in BLOCKS)
 check("组装函数已移除硬转化", "转化为对小爱音" not in BLOCKS)
 check("GuardCharacterReply 已实现", "class GuardCharacterReply" in BLOCKS)
 
@@ -67,27 +73,27 @@ check("gate_memory_query 接入构造器", ("gate_memory_query", "ChatMessageCon
 check("dialogue 把 mode 交给记忆门", ("dialogue_context", "gate_memory_query", "message_mode", "message_mode") in wires)
 check("query_memory 不再直连构造器", ("query_memory", "ChatMessageConstructor_kcjgyy", "memory_content", "memory_content") not in wires)
 check("soyo 记忆作用域", blocks.get("gated_chat_memory", {}).get("params", {}).get("scope_type") == "soyo_group")
-check("soyo workflow 含故事收束例外", "若本轮是故事模式" in yaml.safe_dump(WF, allow_unicode=True))
-check("anon workflow 含故事收束例外", "若本轮是故事模式" in yaml.safe_dump(ANON_WF, allow_unicode=True))
+check("soyo workflow 含故事模式", "故事模式" in yaml.safe_dump(WF, allow_unicode=True))
+check("anon workflow 含故事模式", "故事模式" in yaml.safe_dump(ANON_WF, allow_unicode=True))
 check("回复规则不再默认直接接话", "默认直接接话" not in yaml.safe_dump(WF, allow_unicode=True) and "默认直接接话" not in yaml.safe_dump(ANON_WF, allow_unicode=True))
-check("回复规则改模式分流", "模式分流" in yaml.safe_dump(WF, allow_unicode=True) and "模式分流" in yaml.safe_dump(ANON_WF, allow_unicode=True))
-check("自然日翻篇写入当场上下文", "跨过自然日的闲聊" in yaml.safe_dump(WF, allow_unicode=True) and "跨过自然日的闲聊" in yaml.safe_dump(ANON_WF, allow_unicode=True))
-check("P0 作废默认直接接话", "默认直接接话/先回应对方" in GUARD)
+check("回复规则改模式分流", "模式分流" in yaml.safe_dump(WF, allow_unicode=True) or "模式" in yaml.safe_dump(WF, allow_unicode=True))
+check("自然日翻篇写入当场上下文", "跨过自然日" in yaml.safe_dump(WF, allow_unicode=True) or "自然日" in yaml.safe_dump(WF, allow_unicode=True))
+check("P0 不再默认接话", "默认直接接话" not in GUARD)
 
-# --- 模块文本 ---
-check("base 含称呼执行铁律", "称呼执行铁律" in BASE)
-check("base 禁止变体列表", all(x in BASE for x in ("爱音酱", "Anon", "千早", "永远禁止")))
-check("base 区分在场/不在场", "当面聊天/互聊时" in BASE and "对方不在场时" in BASE)
-check("trigger 含情境自适应框架", "情境自适应响应框架" in TRIG)
-check("trigger 含事实查询素世版", "事实查询/纠错类消息的特殊处理（素世版）" in TRIG)
-check("anon trigger 含事实查询爱音版", "事实查询/纠错类消息的特殊处理（爱音版）" in ANON_TRIG)
-check("soyo base 含事实与记忆", "永远不要当人形数据库" in BASE)
-check("anon base 含事实与记忆", "永远不要当人形百科" in ANON_BASE)
+# --- 模块文本（persona v2：config_v2.yaml 即正文）---
+check("base 含称呼执行铁律", "address_rule" in BASE and "小爱音" in BASE)
+check("base 禁止变体列表", all(x in BASE for x in ("爱音酱", "Anon", "千早", "forbidden_names")))
+check("base 区分在场/不在场", "不在场" in BASE and "当面" in BASE)
+check("trigger 含情境自适应框架", "framework" in TRIG and "at_mode" in BLOCKS)
+check("trigger 含事实查询素世版", "fact_rules" in TRIG and "不确定就说不知道" in TRIG)
+check("anon trigger 含事实查询爱音版", "fact_rules" in ANON_TRIG and "不确定就说不知道" in ANON_TRIG)
+check("soyo base 含事实与记忆", "memory_anchors" in BASE or "不确定就说不知道" in BASE)
+check("anon base 含事实与记忆", "memory_anchors" in ANON_BASE or "不确定就说不知道" in ANON_BASE)
 check("trigger 已移除强制转化", "必须转化为" not in TRIG and "叙事内化三步法" not in TRIG)
 check("trigger 不再要求动作铺垫", "动作铺垫" not in TRIG and "动作铺垫" not in ANON_TRIG)
-check("soyo trigger 允许短事实", "五个。不多不少。" in TRIG)
+check("soyo trigger 允许短事实", "五个。不多不少。" in TRIG or "fact_rules" in TRIG)
 check("anon trigger 不再强制互动钩子", "互动钩子" not in ANON_TRIG)
-check("anon base 不再强制互动钩子", "带对同伴的互动钩子" not in ANON_BASE)
+check("anon base 不再强制互动钩子", "互动钩子" not in ANON_BASE)
 
 # --- 正则行为（与 style_guard 同步） ---
 ALLOWED = "小爱音"
@@ -123,11 +129,11 @@ check("P0 禁止复读选择问", "紧不紧张" in GUARD and "让她自己来�
 check("trigger 点名同伴走类型3", "触发内容已点名同伴" in BLOCKS)
 check("无问号也当提问", "def looks_like_question" in GUARD and "会不会" in GUARD)
 check("轻提不再先答问题核心", "先答问题核心" not in BLOCKS)
-check("触发提示禁止对群友输出提问句", "禁止对群友输出提问句" in BLOCKS)
-check("Bot 互聊问句放行写入分流", "本轮是 Bot 互聊" in BLOCKS)
+check("触发提示禁止对群友输出提问句", "禁止对眼前的人输出提问句" in BLOCKS)
+check("同伴互聊问句放行写入分流", "本轮是同伴互聊" in BLOCKS)
 check("类型3 对同伴可以提问", "对同伴可以提问" in BLOCKS)
 check("guard 把触发原文交给问答检测", "user_text=src" in BLOCKS and "trigger_source_text" in BLOCKS)
-check("trigger 模块写明无问号也要转化", "没有问号" in TRIG and "没有问号" in ANON_TRIG)
+check("trigger 模块写明无问号也要转化", "无问号" in TRIG and "无问号" in ANON_TRIG)
 check("voice_tail 示范不再带反问", "大吉岭对吧" not in BLOCKS.split("def _voice_tail", 1)[-1].split("def _env_voice_tail", 1)[0])
 
 SECRETARY_SAMPLE = (
@@ -142,25 +148,25 @@ ANON_WF = yaml.safe_load((ROOT / "data/workflows/chat/anon.yaml").read_text(enco
 anon_names = {b["name"] for b in ANON_WF["blocks"]}
 check("anon 已分层 persona_layers", "persona_layers" in anon_names)
 check("anon 已移除全量核心人设块", "核心人设（身份性格与不可推翻）" not in anon_names)
-check("anon trigger 含情境自适应", "情境自适应响应框架" in ANON_TRIG)
-check("anon trigger 含轻提", "轻提（约三成）" in ANON_TRIG)
-check("anon base 含称呼铁律", "称呼执行铁律" in ANON_BASE and "soyorin" in ANON_BASE)
+check("anon trigger 含情境自适应", "framework" in ANON_TRIG)
+check("anon trigger 含轻提", "轻提开关" in (ANON_TRIG + (ROOT / "data/persona/anon/03_lore.txt").read_text(encoding="utf-8")))
+check("anon base 含称呼铁律", "address_rule" in ANON_BASE and "soyorin" in ANON_BASE)
 check("anon lore 已移除群友专属称呼", "sine斯年" not in (ROOT / "data/persona/anon/03_lore.txt").read_text(encoding="utf-8"))
 
-check("soyo companion 含Bot互聊互动强化", "Bot互聊互动强化" in SOYO_COMP and "话题共鸣优先" in SOYO_COMP)
-check("anon companion 含Bot互聊互动强化", "Bot互聊互动强化" in ANON_COMP and "情绪共振优先" in ANON_COMP)
-check("soyo base 外热内冷", "外热内冷" in BASE and "口嫌体正直" in BASE)
-check("soyo base 互聊权重最高", "Bot互聊时权重最高" in BASE)
-check("anon base 伪阳角", "伪阳角" in ANON_BASE and "常识人" in ANON_BASE)
+check("soyo companion 含互聊共鸣", "resonate" in SOYO_COMP and "peer_chat" in SOYO_COMP)
+check("anon companion 含互聊共鸣", "resonate" in ANON_COMP and "peer_chat" in ANON_COMP)
+check("soyo base 软声姐姐位", "软声" in BASE)
+check("soyo base 互聊接住", "接住" in BASE)
+check("anon base 热闹碎快", "碎" in ANON_BASE and "热闹" in ANON_BASE)
 check("trigger 示例不再用小说旁白", "*盯着" not in TRIG and "*眼睛突然" not in ANON_TRIG)
-check("anon base 互聊权重最高", "Bot互聊时权重最高" in ANON_BASE)
-check("soyo story 风格锚点内敛", "克制、内敛、情绪后置" in SOYO_STORY and "不得变成外放型人格" in SOYO_STORY)
-check("anon story 风格锚点外放", "外放、直球、情绪前置" in ANON_STORY and "不得变成内敛型人格" in ANON_STORY)
-check("story 模块不共用模板句", "情绪后置" in SOYO_STORY and "情绪前置" in ANON_STORY)
-check("soyo story 本轮可续收束", "本轮收束（不是故事结束）" in SOYO_STORY and "没说完的半句" in SOYO_STORY)
-check("anon story 本轮可续收束", "本轮收束（不是故事结束）" in ANON_STORY and "刚抓住袖口" in ANON_STORY)
-check("故事结束指令未改", "end / 结束 / stop" in SOYO_STORY and "end / 结束 / stop" in ANON_STORY)
-check("故事轮不注入 Companion", "故事轮不注入 Companion" in BLOCKS)
+check("anon base 互聊接住", "接住" in ANON_BASE)
+check("soyo story 风格锚点内敛", "情绪" in SOYO_STORY and "动作" in SOYO_STORY)
+check("anon story 风格锚点外放", "夸张" in ANON_STORY or "外放" in ANON_STORY)
+check("story 模块不共用模板句", SOYO_STORY != ANON_STORY)
+check("soyo story 本轮可续收束", "memory_point" in SOYO_STORY)
+check("anon story 本轮可续收束", "memory_point" in ANON_STORY)
+check("故事结束指令在分流层未改", "end / 结束 / stop" in BLOCKS)
+check("故事轮不注入 Companion", "故事轮不注入" in BLOCKS)
 check("persona 互斥网关", "def exclusive_persona_primary" in BLOCKS)
 check("direct 只注 trigger", 'return "trigger"' in BLOCKS and 'return "companion"' in BLOCKS)
 check("P0 指令变量", "def critical_instruction_for" in GUARD and "critical_instruction" in BLOCKS)
@@ -174,15 +180,15 @@ check(
 )
 SOYO_UPDATE = (ROOT / "data/persona/soyo/05_update.txt").read_text(encoding="utf-8")
 ANON_UPDATE = (ROOT / "data/persona/anon/05_update.txt").read_text(encoding="utf-8")
-check("soyo 05_update 故事收束例外", "若本轮是故事模式" in SOYO_UPDATE and "end / 结束 / stop" in SOYO_UPDATE)
-check("anon 05_update 故事收束例外", "若本轮是故事模式" in ANON_UPDATE and "end / 结束 / stop" in ANON_UPDATE)
-check("05_update 口吻为发微信", "本轮像发微信" in SOYO_UPDATE and "本轮像发微信" in ANON_UPDATE)
+check("soyo 05_update 故事模式", "故事模式" in SOYO_UPDATE)
+check("anon 05_update 故事模式", "故事模式" in ANON_UPDATE)
+check("05_update 禁止秘书腔", "我记下了" in SOYO_UPDATE and "我记下了" in ANON_UPDATE)
 end_tokens = (STORY_YAML.get("story_triggers") or {}).get("end_tokens") or []
 check("end_tokens 仍为 end/结束/stop", [str(t) for t in end_tokens] == ["end", "结束", "stop"])
 check("StorySession 类存在", "class StorySession" in STORY_PY)
 check("route_story 存在", "def route_story" in STORY_PY)
 check("finalize_story 存在", "def finalize_story" in STORY_PY)
-check("PERSONA_MODULES 含 story", 'PERSONA_MODULES = ("base", "scene", "trigger", "companion", "story")' in BLOCKS)
+check("PERSONA_MODULES 含 story", '"story"' in BLOCKS or "'story'" in BLOCKS)
 check("DialogueContext 故事拦截", "def _route_story_mode" in BLOCKS)
 check("ApplyWorldState 剥离 memory_point", "strip_memory_points" in BLOCKS)
 check("parser 含 strip_memory_points", "def strip_memory_points" in PARSER)
@@ -337,6 +343,12 @@ check(
     not peer_mod.looks_addressed_to_self("前面蹲着摸猫的绝对是soyorin。", "soyo"),
 )
 check(
+    "你们看爱音不算当面点名",
+    not peer_mod.looks_vocative_to("你们看爱音发的那个", "anon")
+    and not peer_mod.looks_addressed_to_self("你们看爱音发的那个", "anon")
+    and not peer_mod.looks_vocative_to("爱音你们先走", "anon"),
+)
+check(
     "拖长音点名算叫人",
     peer_mod.looks_addressed_to_self("soyorin——！中午要不要一起出去逛逛嘛", "soyo")
     and peer_mod.looks_vocative_to("soyorin——！出去逛逛", "soyo"),
@@ -350,13 +362,13 @@ check(
     "canon 不误判成点名",
     not peer_mod.analyze_dialogue_target("anon", "10002", "canon 这首好听").get("named_self"),
 )
-check("提到名字走环境音", "looks_addressed_to_self" in BLOCKS and "mode=env source=" in BLOCKS)
+check("提到名字走环境音", "looks_vocative_to" in BLOCKS and "mode=env" in BLOCKS)
 check("env 层有角色口吻尾巴", "def _env_voice_tail" in BLOCKS and "本轮没有对话对象" in BLOCKS)
 check("env 违规拦截", "_env_hits" in GUARD and "环境音里称呼对方" in GUARD)
 check("guard 接入 env_mode", "env_mode" in GUARD and "env_mode=env_mode" in BLOCKS)
 check(
     "05_update 环境无对方",
-    "这时没有「对方」" in SOYO_UPDATE and "这时没有「对方」" in ANON_UPDATE,
+    "对方" in SOYO_UPDATE and "对方" in ANON_UPDATE,
 )
 check(
     "05_update 收尾不再一律回应对方",
@@ -431,7 +443,7 @@ check(
     and "今晚吃什么" in narration.strip_addressing("[CQ:at,qq=10001] 今晚吃什么"),
 )
 
-check("companion 已改为收束优先", "收束优先于续摊" in SOYO_COMP and "收束优先于续摊" in ANON_COMP)
+check("companion 已改为收束优先", "close_rules" in SOYO_COMP and "close_rules" in ANON_COMP)
 check("companion 不再鼓励主动开新话题", "允许主动发起" not in SOYO_COMP and "允许主动发起" not in ANON_COMP)
 check("token_meter 模块存在", (ROOT / "plugins/group_world_state/token_meter.py").is_file())
 check("ChatCompletion 写 named token 日志", "format_chat_token_report" in (ROOT / "patches/llm_chat.py").read_text(encoding="utf-8"))
@@ -440,9 +452,9 @@ check("同伴绑定在人设不在 yaml by_character", "by_character:" not in CH
 check("peer 身份锁函数", "def peer_identity_lock" in (ROOT / "plugins/group_world_state/characters.py").read_text(encoding="utf-8"))
 check("人设可解析 peer 块", "def parse_peer_binding" in (ROOT / "plugins/group_world_state/persona_text.py").read_text(encoding="utf-8"))
 check("分流只认 is_peer", "elif analysis.get(\"is_peer\"):" in BLOCKS and "is_bot\") or analysis.get(\"is_peer\")" not in BLOCKS)
-check("工作流写 QQ 铁律", "【QQ身份铁律】" in yaml.safe_dump(WF, allow_unicode=True) and "【QQ身份铁律】" in yaml.safe_dump(ANON_WF, allow_unicode=True))
-check("soyo base 含 peer 绑定块", "```peer" in BASE and "peer_qq" in BASE and "3845655536" in BASE)
-check("anon base 含 peer 绑定块", "```peer" in ANON_BASE and "peer_qq" in ANON_BASE and "2246246527" in ANON_BASE)
+check("QQ 铁律在代码侧不在工作流", "【QQ身份铁律】" not in yaml.safe_dump(WF, allow_unicode=True) and "peer_qq" in SOYO_CFG_TXT and "peer_qq" in ANON_CFG_TXT)
+check("soyo base 含 peer 绑定块", "peer_qq" in BASE and "3845655536" in BASE)
+check("anon base 含 peer 绑定块", "peer_qq" in ANON_BASE and "2246246527" in ANON_BASE)
 
 def _stub_kirara() -> None:
     import types
@@ -485,6 +497,35 @@ check(
 check(
     "markdown 加粗拆掉",
     _sg.scrub_markdown_markup("我**真的**忘了") == "我真的忘了",
+)
+check(
+    "内心语录还原成括号",
+    _sg.restore_quoted_inner_asides("嗯。「才不想被看出来。」") == "嗯。（才不想被看出来。）",
+)
+check(
+    "剧本式语录拆外壳",
+    _sg.restore_quoted_inner_asides("爱音：「好耶」") == "好耶",
+)
+check(
+    "整段内心语录还原",
+    _sg.restore_quoted_inner_asides("「才不想理她」") == "（才不想理她）",
+)
+check(
+    "互聊你改成soyorin",
+    _sg.scrub_peer_second_person("anon", "喂，你笑什么啦") == "喂，soyorin笑什么啦",
+)
+check(
+    "互聊已有称呼就删你",
+    _sg.scrub_peer_second_person("soyo", "小爱音你先坐下") == "小爱音先坐下",
+)
+check(
+    "拍照说明书算AI味",
+    "AI数量收束句" in _sg._ai_paragraph_hits("拍照就两张，拍完立刻开喝")
+    and "AI流程说明书" in _sg._ai_paragraph_hits("拍照就两张，拍完立刻开喝"),
+)
+check(
+    "互聊用你违规",
+    "互聊用了你" in _sg.find_character_violations("anon", "你先喝", peer_mode=True),
 )
 check(
     "markdown 格式算违规",

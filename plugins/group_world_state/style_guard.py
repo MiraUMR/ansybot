@@ -207,6 +207,43 @@ def scrub_markdown_markup(text: str) -> str:
     return out.strip()
 
 
+_QUOTED_THOUGHT_HINT = re.compile(
+    r"才不想|才不是|才要|心里|腹诽|不能让她|别让她|不想让|别看出来|偷偷|不理我怎么办|才不是特意"
+)
+_QUOTE_PAIR_RE = re.compile(r"[「『]([^」』]{1,48})[」』]")
+_SPEAKER_PREFIX_RE = re.compile(
+    r"^(?:千早爱音|长崎素世|小爱音|爱音|素世|anon(?:\s*chan)?|soyorin|soyo)\s*[：:]\s*",
+    re.IGNORECASE,
+)
+
+
+def restore_quoted_inner_asides(text: str) -> str:
+    """把内心从语录「」还原成（）；剧本式 角色：「」 拆掉外壳。"""
+    raw = (text or "").strip()
+    if not raw:
+        return raw
+    raw = _SPEAKER_PREFIX_RE.sub("", raw).strip()
+
+    def as_aside(inner: str) -> str:
+        inner = (inner or "").strip()
+        if _QUOTED_THOUGHT_HINT.search(inner):
+            return f"（{inner}）"
+        return inner
+
+    whole = re.fullmatch(r"[「『]([^」』]+)[」』][。．.!！]?", raw)
+    if whole:
+        return as_aside(whole.group(1))
+
+    def repl(m: re.Match) -> str:
+        inner = (m.group(1) or "").strip()
+        if _QUOTED_THOUGHT_HINT.search(inner):
+            return f"（{inner}）"
+        return m.group(0)
+
+    out = _QUOTE_PAIR_RE.sub(repl, raw)
+    return re.sub(r"[ \t]{2,}", " ", out).strip()
+
+
 def scrub_stray_close_quote(text: str) -> str:
     """清掉多余的右引号残留：只在「」数量不配对时动手，不影响正常成对使用。"""
     raw = text or ""
@@ -299,6 +336,9 @@ _AI_PARAGRAPH_RULES: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"(踩雷|搞砸|弄砸).{0,10}(我找你|找你|你负责)"), "AI行程兜底句"),
     (re.compile(r"(周末|周[一二三四五六日天]|明天|后天|下午|晚上).{0,8}吧[，,].{0,10}(我空着|我有空|没事干|有空)"), "AI约时间句"),
     (re.compile(r"(安排明白|安排清楚|帮你约好|我来安排)"), "AI安排腔"),
+    (re.compile(r"就[两二三四五六七八九十\d]{1,2}[张杯碗次口轮件]"), "AI数量收束句"),
+    (re.compile(r"(拍|吃|喝|看|买|照|逛)完立刻"), "AI流程说明书"),
+    (re.compile(r"立刻开(喝|吃|走|拍|逛)"), "AI流程说明书"),
 ]
 _OPEN_SOYO = re.compile(r"^[\s\*＿_]*(?:……|…+|\.{2,})?小爱音[，,]")
 _OPEN_ANON = re.compile(r"(?i)^[\s\*＿_]*(?:……|…+|\.{2,})?soyorin[，,]")
@@ -370,7 +410,33 @@ def looks_chase_in_flight(text: str) -> bool:
 
 def _uses_second_person(text: str) -> bool:
     raw = text or ""
-    return bool(re.search(r"你", raw)) and not re.search(r"^你们", raw.strip())
+    return bool(re.search(r"你(?!们)", raw))
+
+
+def peer_call_of(character: str) -> str:
+    return "soyorin" if (character or "").strip() == "anon" else "小爱音"
+
+
+def scrub_peer_second_person(character: str, text: str) -> str:
+    """互聊里不要「你」：已有称呼就删掉代词，否则换成规定称呼。"""
+    raw = (text or "").strip()
+    if not raw or not re.search(r"你(?!们)", raw):
+        return raw
+    call = peer_call_of(character)
+    out = re.sub(r"你好[啊呀嘛哇]?", call, raw)
+    has_name = (
+        bool(re.search(r"(?i)soyorin", out))
+        if character == "anon"
+        else ("小爱音" in out)
+    )
+    if has_name:
+        out = re.sub(r"你(?!们)", "", out)
+    else:
+        out = re.sub(r"你(?!们)", call, out, count=1)
+        out = re.sub(r"你(?!们)", "", out)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"([，,。.!！?？])\1+", r"\1", out)
+    return out.strip()
 
 _QA_BODY_RULES: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"([\u4e00-\u9fff]{1,2})不\1"), "复读选择问"),
@@ -391,6 +457,7 @@ REWRITE_USER = (
     "禁止用「她」向外转述同伴。"
     "禁止反问（吗/对吧/真的假的/要不要），禁止答题（会的/大概就是）。"
     "禁止AI段落句：不要「也行，要是踩雷了就找你。周末下午吧，我空着」这种让步+兜底+约时间。"
+    "也不要「拍照就两张，拍完立刻开喝」这种把流程一次排完的说明书。"
     "改成角色正在发的一句短微信，碎一点、停半拍，不要排期说明书。"
     "{address}"
     "用角色本人说话，禁止秘书腔（我记下了/你负责/我来安排）。"
@@ -465,10 +532,19 @@ def _rewrite_address(
         extra = "把提问改成一句陈述反应，不要答题，不要反问；没有问号的会不会/什么呢/对吧也要改掉。"
     if any(
         r in reasons
-        for r in ("AI让步条件句", "AI行程兜底句", "AI约时间句", "AI安排腔", "AI三段安排句")
+        for r in (
+            "AI让步条件句",
+            "AI行程兜底句",
+            "AI约时间句",
+            "AI安排腔",
+            "AI三段安排句",
+            "AI数量收束句",
+            "AI流程说明书",
+        )
     ):
         extra += (
             "拆掉排期腔：不要一次说完「也行+要是踩雷+周末空着」。"
+            "也不要把行程压成「就两张、拍完立刻开喝」。"
             "改成一两句短反应，时间含糊带过或干脆不约。"
         )
     if "危急却收束" in reasons:
@@ -478,8 +554,9 @@ def _rewrite_address(
         )
     if "把soyorin当第三人称" in reasons:
         extra += (
-            "对面就是 soyorin，「你」=她。禁止把 soyorin 说成旁边第三个人去跟「你」比较。"
-            "鞋带若散了是你自己的，不是她的。"
+            "对面就是 soyorin，当面喊 soyorin，不要用「你」。"
+            "禁止把 soyorin 说成旁边第三个人。"
+            "鞋带若散了是自己的，不是她的。"
         )
     if "被追却去追" in reasons:
         extra += (
@@ -495,17 +572,20 @@ def _rewrite_address(
             "只输出微信纯文本。"
         )
     if "账号编号外泄" in reasons:
-        extra += "不要写出任何账号或编号。用称呼或「你」说话。"
+        extra += "不要写出任何账号或编号。对同伴只用规定称呼，不要用「你」。"
     if "公式转进" in reasons:
         extra += (
             "不要「小爱音……你说，是不是」这种转进。"
-            "接住眼前这句就停，不要另起一句去问同伴。"
+            "接住眼前这句就停，不要另起一句去问同伴，也不要用「你」。"
         )
+    if "互聊用了你" in reasons:
+        call = peer_call_of(character)
+        extra += f"对同伴不要用「你」，只喊「{call}」。"
     if env_peer_mode:
         call = "soyorin" if character == "anon" else "小爱音"
         return extra + (
             f"本轮是环境闲聊里主动点同伴：必须出现「{call}」，"
-            "可对同伴用「你」；禁止回答旁白、禁止找说话人；不要动作括号。"
+            f"禁止用「你」，只喊「{call}」。禁止回答旁白、禁止找说话人；不要动作括号。"
             "内心至多一句且用本人腔。保留 [CQ:at,qq=…] 原样。"
         )
     if env_mode:
@@ -523,7 +603,7 @@ def _rewrite_address(
         call = "soyorin" if character == "anon" else "小爱音"
         return extra + (
             f"本轮是互聊。若要点名，把「{call}」塞进句子中间或末尾，"
-            f"禁止「{call}，」起手当抬头。上一句已经叫过就用「你」接，不必每轮点名。"
+            f"禁止「{call}，」起手当抬头。禁止用「你」，只喊「{call}」。"
         )
     if any("Phone禁括号" in r or r.startswith("括号过长") for r in reasons):
         return extra + (
@@ -940,11 +1020,10 @@ def find_anon_violations(
         hits.extend(_env_hits(text))
         if topic_idle:
             hits.extend(_idle_pivot_hits("anon", text))
+    if (peer_mode or env_peer_mode) and _uses_second_person(text):
+        hits.append("互聊用了你")
     if require_address and _compact_len(text) >= 12:
-        # 互聊里「你」已经对着同伴，不要为了塞名字把 soyorin 写成第三人称。
-        if not _uses_second_person(text) and not re.search(
-            r"(?i)soyorin", text or ""
-        ):
+        if not re.search(r"(?i)soyorin", text or ""):
             hits.append("未称呼soyorin")
     if peer_mode and _YOU_VS_SOYORIN_RE.search(text or ""):
         hits.append("把soyorin当第三人称")
@@ -1045,8 +1124,10 @@ def find_soyo_violations(
         hits.extend(_env_hits(text))
         if topic_idle:
             hits.extend(_idle_pivot_hits("soyo", text))
+    if (peer_mode or env_peer_mode) and _uses_second_person(text):
+        hits.append("互聊用了你")
     if require_address and _compact_len(text) >= 12:
-        if not _uses_second_person(text) and "小爱音" not in (text or ""):
+        if "小爱音" not in (text or ""):
             hits.append("未称呼小爱音")
     if peer_mode and (
         looks_chase_in_flight(user_text) or looks_peer_distress_cue(user_text)

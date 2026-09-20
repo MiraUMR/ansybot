@@ -130,40 +130,56 @@ def _looks_spoken(text: str, zh: str = "") -> bool:
     return is_spoken_japanese(text, zh)
 
 
-_NAME_RULE = (
-    "人名必须写成日文假名，禁止英文字母和拼音："
-    "爱音/小爱音/千早爱音/Anon/anon chan/あのん → あのんちゃん ；"
-    "素世/长崎素世/soyo/soyorin/そよ → そよりん。"
-)
+_NAME_RULE = {
+    "anon": (
+        "你是爱音在说话。称呼同伴写成「そよりん」。"
+        "禁止自称「あのんちゃん」「anon chan」「あのん」。自称只用「あたし」。"
+    ),
+    "soyo": (
+        "你是素世在说话。称呼同伴写成「あのんちゃん」。"
+        "禁止自称「そよりん」。自称只用「私」。"
+    ),
+}
 
-_JA_QUALITY = (
+_JA_QUALITY_COMMON = (
     "必须译成完整、自然、能直接朗读的日语句子：助词（は/が/を/に/の/て）不能省，主谓齐全。"
     "禁止中日夹杂，禁止残留任何简体或繁体中文（包括什么、嘿嘿、哈哈、语音、听到、嘛、吗、吧、啦）。"
     "语气词改写成短促日文：诶→え、嘿嘿→えへっ、哈哈→あはっ、嗯→うん、啊→あ。"
     "笑声不要写成あはは／えへへ长串，最多「えへっ」「あはっ」「ふふっ」。"
     "必须保留原文里的店、食物、人名、地点，不要概括成别的意思。"
-    f"{_NAME_RULE}"
     "除人名假名外，只用日文假名和常用汉字。"
 )
 
-_JA_EXAMPLES = (
-    "示例："
-    "「嘿嘿，soyorin～听到我叫你了吗？」→「えへっ、そよりん、呼んでるの、聞こえた？」"
-    "「听到了，小爱音，声音那么亮当然能注意到。」→「聞こえたよ、あのんちゃん、声があんなに大きいんだから気づかないわけないでしょ。」"
-    "「顺耳什么啊。」→「耳触りいいって、何よ。」"
-)
+_JA_EXAMPLES = {
+    "anon": (
+        "示例："
+        "「嘿嘿，soyorin～听到我叫你了吗？」→「えへっ、そよりん、呼んでるの、聞こえた？」"
+        "「顺耳什么啊。」→「耳触りいいって、何よ。」"
+    ),
+    "soyo": (
+        "示例："
+        "「听到了，小爱音，声音那么亮当然能注意到。」→「聞こえたよ、あのんちゃん、声があんなに大きいんだから気づかないわけないでしょ。」"
+        "「顺耳什么啊。」→「耳触りいいって、何よ。」"
+    ),
+}
+
+
+def _ja_quality(character: str) -> str:
+    cid = character if character in _NAME_RULE else "anon"
+    return f"{_JA_QUALITY_COMMON}{_NAME_RULE[cid]}"
+
 
 _JA_SYS = {
     "anon": (
         "把下面这句中文口语译成爱音会说的完整日文句。"
-        f"{_JA_QUALITY}"
-        f"{_JA_EXAMPLES}"
+        f"{_ja_quality('anon')}"
+        f"{_JA_EXAMPLES['anon']}"
         "只输出一行日文，不要解释，不要引号，不要 Markdown。"
     ),
     "soyo": (
         "把下面这句中文口语译成素世会说的完整日文句。"
-        f"{_JA_QUALITY}"
-        f"{_JA_EXAMPLES}"
+        f"{_ja_quality('soyo')}"
+        f"{_JA_EXAMPLES['soyo']}"
         "只输出一行日文，不要解释，不要引号，不要 Markdown。"
     ),
 }
@@ -172,16 +188,16 @@ _CLIP_SYS = {
     "anon": (
         "你是爱音的语音台词编辑。从她这轮中文回复里切出第一句完整口语，再译成日文。"
         "切句必须是完整的一句（叫名和后面那句可以算一句），不要半截词，也不要整段独白。"
-        f"{_JA_QUALITY}"
-        f"{_JA_EXAMPLES}"
+        f"{_ja_quality('anon')}"
+        f"{_JA_EXAMPLES['anon']}"
         "只输出一行 JSON：{\"zh\":\"切出的中文\",\"ja\":\"完整日文句\"}。"
         "不要解释，不要 Markdown。"
     ),
     "soyo": (
         "你是素世的语音台词编辑。从她这轮中文回复里切出第一句完整口语，再译成日文。"
         "切句必须是完整的一句（叫名和后面那句可以算一句），不要半截词，也不要整段独白。"
-        f"{_JA_QUALITY}"
-        f"{_JA_EXAMPLES}"
+        f"{_ja_quality('soyo')}"
+        f"{_JA_EXAMPLES['soyo']}"
         "只输出一行 JSON：{\"zh\":\"切出的中文\",\"ja\":\"完整日文句\"}。"
         "不要解释，不要 Markdown。"
     ),
@@ -323,9 +339,9 @@ def _sf_translate(cfg: dict, character: str, clip: str) -> str:
     out = _sf_chat(cfg, _JA_SYS.get(character) or _JA_SYS["anon"], f"原文：{clip.strip()}")
     _zh, ja = _parse_clip_json(out)
     if _looks_spoken(ja, clip):
-        return normalize_ja_for_tts(ja)
+        return normalize_ja_for_tts(ja, character)
     line = (out or "").splitlines()[0].strip() if out else ""
-    spoken = normalize_ja_for_tts(line)
+    spoken = normalize_ja_for_tts(line, character)
     return spoken if _looks_spoken(spoken, clip) else ""
 
 
@@ -336,7 +352,7 @@ def _sf_clip_and_translate(cfg: dict, character: str, raw: str) -> tuple[str, st
     sys_prompt = _CLIP_SYS.get(character) or _CLIP_SYS["anon"]
     out = _sf_chat(cfg, sys_prompt, f"角色：{character}\n原文：{raw.strip()}")
     zh, ja = _parse_clip_json(out)
-    ja = normalize_ja_for_tts(ja)
+    ja = normalize_ja_for_tts(ja, character)
     if not _looks_spoken(ja, zh or raw):
         if ja_has_zh_leftover(ja, zh or raw):
             logger.info(f"siliconflow leftover ja={ja!r} zh={zh!r}")
@@ -352,7 +368,7 @@ def _to_spoken_ja(manager: Any, character: str, clip: str, cfg: Optional[dict] =
         spoken = _sf_translate(cfg, character, clip)
     if not _looks_spoken(spoken, clip):
         spoken = _llm_to_ja(manager, character, clip)
-    spoken = normalize_ja_for_tts(spoken)
+    spoken = normalize_ja_for_tts(spoken, character)
     if not _looks_spoken(spoken, clip):
         return ""
     return spoken

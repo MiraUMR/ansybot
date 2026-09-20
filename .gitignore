@@ -57,11 +57,17 @@ data/tts/samples/
 logs/
 botpy.log
 scripts/_tmp_*
+data/_tmp_*
+data/voice_patterns/cache/
+data/voice_patterns/corpus/
 
 # Login QR codes (session material, not source)
 *_qr.png
 *login_qr.png
 local_secrets*.zip
+
+# WeChat PadPro admin-key probes (embed local license/admin keys; keep local only)
+scripts/wechat_padpro/
 
 # IDE / OS
 .idea/

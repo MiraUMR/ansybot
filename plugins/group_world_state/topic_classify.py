@@ -1009,10 +1009,10 @@ def chase_scene_lock_text(character: str, mode: str = "") -> str:
         "reply_stance: engage\n"
         "detector: chase_in_flight\n"
         "ACTION: still_chasing\n"
-        "ROLE: 你在追 soyorin；对面的「你」就是她。鞋带散了是你自己的\n"
+        "ROLE: 你在追 soyorin；当面喊 soyorin，不要用「你」。鞋带散了是自己的\n"
         "FORBID: idle_ambient|你比soyorin|把soyorin当第三人称|鞋带怪她|activity_menu\n"
         "HOBBY_PACK: NOT_LOADED\n"
-        "OUTPUT: 对她说话（可用你）；禁止「你鞋带散着都比soyorin跑得快」这种把她说成旁边第三人\n"
+        "OUTPUT: 对 soyorin 说话，只喊 soyorin，不要用「你」；禁止把她说成旁边第三人\n"
         "NOTE: 不要跟旁边的人比谁跑得快。\n"
         "[/TOPIC_LOCK]"
     ).strip()

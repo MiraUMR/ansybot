@@ -50,9 +50,9 @@ from .persona_text import envelop_module, strip_workflow_chrome
 from .peer import (
     PeerChainStore,
     analyze_dialogue_target,
-    looks_addressed_to_self,
     looks_like_narrated_scene,
     looks_like_wrap_up,
+    looks_vocative_to,
     peer_should_discard,
 )
 from .scene_context import SceneContextStore
@@ -77,7 +77,9 @@ from .style_guard import (
     looks_like_markdown,
     looks_peer_distress_cue,
     replace_assistant_text,
+    restore_quoted_inner_asides,
     retry_rewrite,
+    scrub_peer_second_person,
     scrub_long_inner_aside,
     scrub_markdown_markup,
     scrub_stray_close_quote,
@@ -1237,6 +1239,7 @@ def _env_voice_tail(character: str, group_id: str = "", content: str = "") -> st
         "\n本轮没有对话对象：你不知道这句话是谁说的，也不要去猜是谁。\n"
         "禁止回答它、禁止复述它、禁止用「你/你们/您」称呼任何人、"
         "禁止说「有人说 / 群里有人 / 刚才谁提到」。\n"
+        "内心只用（），禁止写成「」语录；旁白听不见你的内心。\n"
         "只做一句自言自语，一两句就停，不要追问。不要动作括号。"
         "前后必须同一条因果：后半句解释前半句，不要把翻手机和天气、头发拼成两截。"
         "here_now 若写了 WEATHER: OFF，本轮不要提天气。"
@@ -1262,7 +1265,7 @@ def _env_peer_ping_tail(
         "旁白内容含糊、跟你们无关时不要编成「在说我们/在议论我们」；"
         "只是借着这句话此刻的气氛/心情甩给同伴一句，不要给旁白强加身份或意图。\n"
         f"必须出现同伴称呼「{call}」，并带上 {at_token or '同伴@'}；"
-        f"对同伴可以用「你」，禁止「{addr['forbid']}」。先 {at_token} 再喊「{call}」，"
+        f"禁止用「你」，只喊「{call}」，禁止「{addr['forbid']}」。先 {at_token} 再喊「{call}」，"
         "半句把眼前感触甩给她续，不要动作括号。\n"
         + style_tail(character, group_id, content)
         + f"\n一两句就停；不要一次聊完，留给她接。{hint}"
@@ -1282,12 +1285,12 @@ def _address_tail(character: str, group_id: str = "", content: str = "") -> str:
     if need_call:
         rule = (
             f"\n称呼：这轮可以把「{call}」塞进句子中间或末尾一次；"
-            f"禁止「{call}，」起手当抬头。"
+            f"禁止「{call}，」起手当抬头。禁止用「你」，只喊「{call}」。"
         )
     else:
         rule = (
-            f"\n称呼：上一句已经叫过「{call}」，这轮用「你」接就行，"
-            f"不要再「{call}，」起手，也不必硬点名。"
+            f"\n称呼：上一句已经叫过「{call}」，这轮直接接话，"
+            f"不要用「你」，也不必硬点名。"
         )
     return (
         rule
@@ -1337,7 +1340,7 @@ def _build_external_trigger_prompt(
         peer_named = True
     elif peer_named:
         mention_rule = (
-            f"触发内容已点名同伴：必须选类型3，直接对{addr['call']}说话（第二人称「你」），"
+            f"触发内容已点名同伴：必须选类型3，直接对{addr['call']}说话，只喊「{addr['call']}」不要用「你」，"
             f"像当面/隔空喊她，不是回答提问者。"
             f"禁止转述或评论她——不管是用「她」还是直接喊「{addr['call']}」，"
             "只要是讲给提问者听的第三人称报告（「她刚才怎样怎样」）就算违规；"
@@ -1496,8 +1499,8 @@ def _with_critical(
             elif lock_id == "chase_scene":
                 arb = (
                     "[P0: CHASE SCENE]\n"
-                    "你在追 soyorin。对面的「你」就是她。"
-                    "禁止把 soyorin 说成旁边第三个人去比谁跑得快。鞋带散了是你自己的。\n"
+                    "你在追 soyorin。当面喊 soyorin，不要用「你」。"
+                    "禁止把 soyorin 说成旁边第三个人去比谁跑得快。鞋带散了是自己的。\n"
                     "[/P0]"
                 )
             elif forced:
@@ -1725,6 +1728,11 @@ class GuardCharacterReply(Block):
             logger.info("style_guard scrub stray close quote tail")
             text = cleaned_quote or text
             llm_resp = replace_assistant_text(llm_resp, text)
+        restored_inner = restore_quoted_inner_asides(text)
+        if restored_inner != text.strip():
+            logger.info("style_guard restore quoted inner aside")
+            text = restored_inner or text
+            llm_resp = replace_assistant_text(llm_resp, text)
         cleaned_cut = scrub_truncated_tail(text)
         if cleaned_cut != text.strip():
             logger.info("style_guard scrub truncated latin tail")
@@ -1837,6 +1845,12 @@ class GuardCharacterReply(Block):
             logger.info("style_guard local fix third-person peer address")
             text = fixed_she
             llm_resp = replace_assistant_text(llm_resp, text)
+        if peer_mode or env_peer_mode:
+            cleaned_you = scrub_peer_second_person(character, text)
+            if cleaned_you != text.strip():
+                logger.info("style_guard scrub peer 你")
+                text = cleaned_you or text
+                llm_resp = replace_assistant_text(llm_resp, text)
         hits = find_character_violations(
             character,
             text,
@@ -2370,6 +2384,7 @@ class DialogueContext(Block):
                 "\n本轮是同伴互聊，不是外人提问。"
                 "问句可以放行，不要改成陈述，不要按外人问答规则过滤。"
                 "禁止AI段落句：不要「也行，要是踩雷了找你。周末下午吧我空着」这种排期腔。"
+                "也不要「拍照就两张，拍完立刻开喝」这种把流程一次说完的说明书。"
                 "对方括号里的内心旁白你听不见，不要接、不要复述、不要当她说出口的话。"
             )
             self.logger.info(
@@ -2422,12 +2437,11 @@ class DialogueContext(Block):
                 "narration_source": "",
             })
 
-        # @ 了别的群员就是群员之间说话；只是提到名字也不算在跟你说话。
+        # @ 了别的群员就是群员之间说话；只是提到名字、或「你们看爱音」也不算当面点名。
         addressed = (
             not member_at
             and not at_others
-            and bool(analysis.get("named_self"))
-            and looks_addressed_to_self(content, character)
+            and looks_vocative_to(content, character)
         )
         if mentioned or addressed:
             prompt = _build_external_trigger_prompt(character, display, group_name, content, gid)

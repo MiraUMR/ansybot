@@ -16,6 +16,8 @@ from typing import Dict, List, Tuple
 
 import yaml
 
+from .speech_model import pattern_pools, pattern_voice_line, retrieve_examples
+
 ROOT = Path("data/world_state/_voice_pack")
 _lock = threading.RLock()
 
@@ -38,8 +40,8 @@ _VOICE_LINE: Dict[str, str] = {
 }
 
 _INNER_LINE: Dict[str, str] = {
-    "anon": "内心（）碎急嘴硬，一拍就完，别写成两句剧情，也不要写成同伴那种淡藏。",
-    "soyo": "内心（）淡短藏着，一拍就完，别写成两句剧情，也不要写成同伴那种碎急。",
+    "anon": "内心只用（）碎急嘴硬，一拍就完，别写成「」语录，也不要写成同伴那种淡藏。",
+    "soyo": "内心只用（）淡短藏着，一拍就完，别写成「」语录，也不要写成同伴那种碎急。",
 }
 
 # 例句池分两档：
@@ -53,34 +55,34 @@ _EXAMPLES: Dict[str, Dict[str, List[str]]] = {
             "行行行。",
             "嗯嗯，知道啦。",
             "啊这样啊。",
-            "随便，你定就好。",
+            "随便啦。",
             "好像还行？",
             "先这样吧。",
             "嗯……那就这样。",
-            "可以啊，随你。",
+            "可以啊。",
             "还好吧。",
             "啊对对对。",
             "行，说定了。",
         ],
         "quirk": [
             "诶——？！真的假的。",
-            "等一下等一下，你再说一遍。",
+            "等一下等一下，再说一遍。",
             "啊啊啊我知道了我知道了！",
             "……行吧。那就这样。",
             "哪里土了！超好听的吧！",
             "Anyway，先去吃。",
-            "重死了你——",
+            "重死了——",
             "我我我，我也算数吧？",
             "呃……算了，不管了。",
             "soyorin！走啊现在！",
             "谁说的！才不是这样。",
-            "喂，你笑什么啦。",
+            "喂，笑什么啦。",
         ],
     },
     "soyo": {
         "plain": [
             "嗯。",
-            "随你吧。",
+            "都行。",
             "还好。",
             "知道了。",
             "也行。",
@@ -94,14 +96,14 @@ _EXAMPLES: Dict[str, Dict[str, List[str]]] = {
         ],
         "quirk": [
             "……也不是不行。",
-            "你啊，总是这样。",
+            "小爱音啊，总是这样。",
             "不要。……哈啊，知道了。",
-            "……真拿你没办法。",
-            "哈啊……你又来。",
+            "……真拿小爱音没办法。",
+            "哈啊……又来。",
             "别站着说话。",
             "……说了也没用。",
-            "谁要理你。",
-            "……随便你怎么想。",
+            "谁要理。",
+            "……随便怎么想。",
             "把话说完再走。",
         ],
     },
@@ -220,7 +222,11 @@ def _cid(character: str) -> str:
 
 def voice_line(character: str) -> str:
     """一句话声线。所有层共用，禁止在别处重写。"""
-    return _VOICE_LINE[_cid(character)]
+    base = _VOICE_LINE[_cid(character)]
+    extra = pattern_voice_line(character)
+    if extra and extra not in base:
+        return f"{base} {extra}"
+    return base
 
 
 def inner_line(character: str) -> str:
@@ -238,13 +244,22 @@ def _pick_examples(character: str, group_id: str, pools: List[str], count: int) 
     return random.sample(pool, n)
 
 
+def _example_pools(character: str) -> Dict[str, List[str]]:
+    cid = _cid(character)
+    base = _EXAMPLES[cid]
+    extra = pattern_pools(character)
+    plain = list(dict.fromkeys((extra.get("plain") or []) + base["plain"]))
+    quirk = list(dict.fromkeys((extra.get("quirk") or []) + base["quirk"]))
+    return {"plain": plain or base["plain"], "quirk": quirk or base["quirk"]}
+
+
 def rotating_examples(
     character: str, group_id: str = "", count: int = 2, *, daily: bool = False
 ) -> List[str]:
-    """随机取例句：日常寄语从 plain 池子抽 1 句；高光时刻从 quirk 池子抽 2 句混搭。"""
-    cid = _cid(character)
-    plain = _EXAMPLES[cid]["plain"]
-    quirk = _EXAMPLES[cid]["quirk"]
+    """随机取例句：日常从 plain 抽；高光从 quirk 混搭。优先用 Bestdori 炼出的池子。"""
+    pools = _example_pools(character)
+    plain = pools["plain"]
+    quirk = pools["quirk"]
     if daily:
         return _pick_examples(character, group_id, plain, 1)
     n_quirk = max(1, count - 1)
@@ -280,7 +295,14 @@ def style_tail(
     bits = [voice_line(character)]
     if with_inner and not daily:
         bits.append(inner_line(character))
-    samples = rotating_examples(character, group_id, daily=daily)
+    recent = _load(character, group_id)["recent_examples"]
+    samples = retrieve_examples(
+        character,
+        content,
+        daily=daily,
+        recent=recent,
+        count=1 if daily else 2,
+    ) or rotating_examples(character, group_id, daily=daily)
     if samples:
         bits.append("语感参考（只学节奏，禁止照抄，措辞自己重新组织）：" + " ".join(f"「{s}」" for s in samples))
     if daily:
@@ -288,6 +310,7 @@ def style_tail(
             "这轮是普通日常对话：像真人随手回消息一样简短自然，长短、用词都自己定，"
             "不必每句都端着人设梗，态度带出性格就够，一两个字也可以。"
             "前后同一条因果，后半句解释前半句，不要两截拼盘。"
+            "不要把行程压成一句说明书：就两张、拍完立刻开喝这种不像随口说话。"
         )
     else:
         bits.append("这轮情绪或分量更足，可以比日常更放开写，但落点仍要来自这句话本身。")
@@ -316,7 +339,8 @@ def note_after_reply(character: str, group_id: str, reply: str) -> None:
     """一轮说完：记下用过的例句（防重复）+ 命中的母题进入冷却。"""
     doc = _load(character, group_id)
     cid = _cid(character)
-    all_examples = _EXAMPLES[cid]["plain"] + _EXAMPLES[cid]["quirk"]
+    pools = _example_pools(character)
+    all_examples = pools["plain"] + pools["quirk"]
     used = [e for e in all_examples if e in (reply or "")]
     if used:
         recent_ex = [e for e in doc.get("recent_examples") or [] if e not in used]

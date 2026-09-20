@@ -235,8 +235,8 @@ _SCENE_HINT = re.compile(
 )
 
 _ASCII_ALIAS = re.compile(r"^[A-Za-z0-9_]+$")
-# 「你/在吗/帮我」这类才算真的在跟角色说话，只是提到名字不算。
-_ADDRESS_HINT = re.compile(r"(你|您|在吗|在不在|来一下|帮我|教我|求你|怎么看|觉得呢)")
+# 「你/在吗/帮我」才算当面说话。必须排除「你们」，否则群友闲聊会被当成点名。
+_ADDRESS_HINT = re.compile(r"(你(?!们)|您|在吗|在不在|来一下|帮我|教我|求你|怎么看|觉得呢)")
 # 爱音常用 soyorin——／小爱音～ 这种拖长，必须算当面叫人。
 _NAME_SEP = "，,、：:！!？?…~～—–―－ー- \t　"
 
@@ -271,7 +271,7 @@ def looks_vocative_to(text: str, character_id: str) -> bool:
     flags = re.IGNORECASE if _ASCII_ALIAS.match(hit) else 0
     if re.search(rf"{re.escape(hit)}\s*[{re.escape(_VOCATIVE_SEP)}]", raw, flags):
         return True
-    if re.search(rf"{re.escape(hit)}\s*(你|出来|在吗|看一下|帮我)", raw, flags):
+    if re.search(rf"{re.escape(hit)}\s*(你(?!们)|您|出来|在吗|看一下|帮我)", raw, flags):
         return True
     return bool(re.search(rf"{re.escape(hit)}\s*[?？]\s*$", raw, flags))
 

@@ -182,11 +182,14 @@ def peer_binding(character_id: str) -> Dict[str, str]:
         if val and not bind.get(key):
             bind[key] = val
     self_meta = get_character(cid)
-    other = None
-    for other_cid in (load_characters().get("characters") or {}):
-        if other_cid != cid:
-            other = other_cid
-            break
+    # peer_id 已由 routing 定死：other 直接取它，不要顺手取到 host。
+    peer_id = str(bind.get("peer_id") or "").strip()
+    other = peer_id or None
+    if not other:
+        for other_cid in (load_characters().get("characters") or {}):
+            if other_cid != cid and other_cid != "host":
+                other = other_cid
+                break
     other_meta = get_character(other) if other else {}
 
     if not bind.get("self_id"):
@@ -237,7 +240,7 @@ def peer_id_for(character_id: str) -> Optional[str]:
     if character_id not in chars:
         return None
     for cid in chars:
-        if cid != character_id:
+        if cid != character_id and cid != "host":
             return cid
     return None
 
@@ -300,7 +303,7 @@ def turn_object_line(character_id: str, *, is_peer: bool) -> str:
     bind = peer_binding(character_id)
     call = bind.get("peer_call") or bind.get("peer_display") or "同伴"
     if is_peer:
-        return f"本轮对象是同伴，当面称「{call}」。不要念任何账号或编号。"
+        return f"本轮对象是同伴，当面称「{call}」，不要用「你」。不要念任何账号或编号。"
     return (
         f"本轮对象是眼前的人，不是同伴。即使自称同名也不要把对方当成「{call}」。"
         "不要念任何账号或编号。"

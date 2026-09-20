@@ -54,7 +54,7 @@ _LAUGH_RE = re.compile(
 _KATA_ANON = re.compile(r"アノン(?:[・\s-]?(?:チャン|ちゃん))?", re.I)
 _KATA_SOYO = re.compile(r"ソヨリン")
 _LAUGH_THEN_NAME = re.compile(
-    r"(えへっ|あはっ|ふふっ|わはっ)[ー~～]*[、,]*\s*(あのんちゃん|そよりん)"
+    r"(えへっ|あはっ|ふふっ|わはっ)[ー~～]*[、,]*\s*(あのんちゃん|そよりん|あたし|私)"
 )
 _JP_SHARED = {
     "突然",
@@ -258,11 +258,11 @@ def clip_to_japanese(clip: str, character: str) -> str:
     if not t:
         return ""
     if _already_ja(t):
-        return normalize_ja_for_tts(t)
+        return normalize_ja_for_tts(t, character)
     key = _norm(t)
     for nk, _orig, ja in _table(character):
         if key == nk:
-            return normalize_ja_for_tts(ja)
+            return normalize_ja_for_tts(ja, character)
     clauses = _clauses(t)
     if len(clauses) < 2:
         return ""
@@ -278,7 +278,7 @@ def clip_to_japanese(clip: str, character: str) -> str:
         if not hit:
             return ""
         bits.append(hit)
-    return normalize_ja_for_tts("、".join(bits))
+    return normalize_ja_for_tts("、".join(bits), character)
 
 
 def stabilize_ja_laugh(text: str) -> str:
@@ -303,9 +303,24 @@ def stabilize_ja_laugh(text: str) -> str:
     return t
 
 
-def lock_character_names(text: str) -> str:
-    """语音日文里人名固定假名：爱音→あのんちゃん，素世→そよりん。罗马音在 all_ja 下会破音。"""
+def lock_character_names(text: str, character: str = "") -> str:
+    """按说话人锁称呼：同伴用假名，禁止自称 あのんちゃん / そよりん。"""
     t = text or ""
+    cid = (character or "").strip().lower()
+    if cid == "anon":
+        t = _KATA_SOYO.sub("そよりん", t)
+        t = _SOYO_NAME.sub("そよりん", t)
+        t = _KATA_ANON.sub("あたし", t)
+        t = _ANON_NAME.sub("あたし", t)
+        t = re.sub(r"anon\s*chan", "あたし", t, flags=re.I)
+        return t
+    if cid == "soyo":
+        t = _KATA_ANON.sub("あのんちゃん", t)
+        t = _ANON_NAME.sub("あのんちゃん", t)
+        t = re.sub(r"anon\s*chan", "あのんちゃん", t, flags=re.I)
+        t = _KATA_SOYO.sub("私", t)
+        t = _SOYO_NAME.sub("私", t)
+        return t
     t = _KATA_ANON.sub("あのんちゃん", t)
     t = _KATA_SOYO.sub("そよりん", t)
     t = _ANON_NAME.sub("あのんちゃん", t)
@@ -337,17 +352,18 @@ def is_spoken_japanese(text: str, zh: str = "") -> bool:
     return (
         "あのんちゃん" in t
         or "そよりん" in t
+        or "あたし" in t
         or "anon chan" in low
         or "anonchan" in low
         or "soyorin" in low
     )
 
 
-def normalize_ja_for_tts(text: str) -> str:
+def normalize_ja_for_tts(text: str, character: str = "") -> str:
     """给 GPT-SoVITS 的日文：假名称呼、短笑声、拉长音。罗马音和长串はは会破音。"""
     t = (text or "").strip().strip("\"'`「」『』")
     t = stabilize_ja_laugh(t)
-    t = lock_character_names(t)
+    t = lock_character_names(t, character)
     t = stabilize_ja_laugh(t)
     t = t.replace("～", "ー").replace("~", "ー")
     t = t.replace("……", "、").replace("…", "、")
