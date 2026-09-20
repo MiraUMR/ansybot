@@ -46,6 +46,14 @@ plain = Msg([TextEl()], "明天去吃")
 check("voice only", mod.is_voice_only(only_voice, "[语音消息]"))
 check("mixed not only", not mod.is_voice_only(mixed, "明天去吃"))
 check("plain text", not mod.is_voice_only(plain, "明天去吃"))
+ja_voice = Msg([VoiceEl()], "えへっ、そよりん、呼んでるの、聞こえた？")
+check("日文语音条当 voice only", mod.is_voice_only(ja_voice, "えへっ、そよりん、呼んでるの、聞こえた？"))
+check("日文口播是 tts caption", mod.is_tts_caption("えへっ、あのんちゃん、聞こえた？"))
+check("中文不是 tts caption", not mod.is_tts_caption("小爱音，今天没安排"))
+check("语音条不算消息", mod.is_voice_bar_event(ja_voice, "えへっ、そよりん、呼んでるの、聞こえた？"))
+check("中文加语音仍算那一句", not mod.is_voice_bar_event(mixed, "明天去吃"))
+disp = (ROOT / "patches/dispatcher.py").read_text(encoding="utf-8")
+check("调度层丢掉语音条", "is_voice_bar_event" in disp and "skip voice bar" in disp)
 check("spoken strips voice", mod.spoken_text(mixed) == "明天去吃")
 check("is voice element", mod.is_voice_element(VoiceEl()) and not mod.is_voice_element(TextEl()))
 
@@ -74,20 +82,24 @@ check("keep vocative name", "逛逛" in call_clip and "soyorin" in call_clip.low
 ask_clip = jp.first_voice_clip("诶？！要去喊soyorin出去玩吗——\n\n……也不是不行啦，反正她今天也没安排")
 check("keep 语气词 and name", "诶" in ask_clip and "soyorin" in ask_clip.lower())
 locked = jp.normalize_ja_for_tts("あのん、そよりん行こう")
-check("lock anon chan", "anon chan" in locked and "あのん" not in locked)
-check("lock soyorin", "soyorin" in locked and "そよ" not in locked)
+check("lock あのんちゃん", "あのんちゃん" in locked and "anon" not in locked.lower())
+check("lock そよりん", "そよりん" in locked and "soyorin" not in locked.lower())
 space_keep = jp.normalize_ja_for_tts("anon chan、行こうよ")
-check("keep latin space", "anon chan" in space_keep)
+check("romaji 改假名", "あのんちゃん" in space_keep and "anon" not in space_keep.lower())
+laugh = jp.normalize_ja_for_tts("えへへへ、soyorin～聞こえた？")
+check("笑声收短", "えへっ" in laugh and "えへへ" not in laugh)
+check("笑声后接假名称呼", "そよりん" in laugh and "soyorin" not in laugh.lower())
 check("reject leftover 什么", jp.ja_has_zh_leftover("耳にいい什么の。", "顺耳什么啊"))
 check("reject leftover 嘿嘿", jp.ja_has_zh_leftover("え、突然发语音过来嘿嘿ー。", "突然发语音过来嘿嘿"))
 check(
     "accept complete ja",
-    jp.is_spoken_japanese("えへへ、soyorin、呼んでるの、聞こえた？", "嘿嘿，soyorin听到我叫你了吗"),
+    jp.is_spoken_japanese("えへっ、そよりん、呼んでるの、聞こえた？", "嘿嘿，soyorin听到我叫你了吗"),
 )
 check("reject mixed ja", not jp.is_spoken_japanese("あ、soyorin突然发语音过来、。", "突然发语音过来"))
 
 check("siliconflow clip", "_sf_clip_and_translate" in cv and "siliconflow.cn" in cv)
-check("name romaji rule", "anon chan" in cv and "soyorin" in cv)
+check("name kana rule", "あのんちゃん" in cv and "そよりん" in cv)
+check("laugh short in prompt", "えへっ" in cv and "あはっ" in cv)
 check("complete sentence prompt", "完整、自然" in cv and "Qwen/Qwen2.5-72B-Instruct" in cv)
 
 if failed:

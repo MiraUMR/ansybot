@@ -231,6 +231,16 @@ class WorldStateStore:
         text = (text or "").strip()
         if not text:
             raise ValueError("内容不能为空")
+        try:
+            from .day_rollover import sanitize_longterm_text
+
+            cleaned = sanitize_longterm_text(key, text)
+            if key == "relationship" or key == "plot" or key.startswith("nickname_"):
+                if not cleaned:
+                    return self.get(scope)
+                text = cleaned
+        except Exception:
+            pass
         if len(text) > self.max_text_length:
             text = text[: self.max_text_length]
         with self._lock:

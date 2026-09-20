@@ -102,20 +102,43 @@ class DefaultMemoryComposer(MemoryComposer):
         )
 
 
+def _compact_today_entries(entries: List[MemoryEntry]) -> List[MemoryEntry]:
+    today_entries = _today_memory_entries(entries)
+    try:
+        from group_world_state.memory_inject import compact_memory_entries
+    except Exception:
+        try:
+            from kirara_ai.plugins.group_world_state.memory_inject import compact_memory_entries
+        except Exception:
+            return today_entries[-6:]
+    return compact_memory_entries(today_entries)
+
+
+def _clip_entry_content(content: str) -> str:
+    try:
+        from group_world_state.memory_inject import clip_memory_entry_text
+    except Exception:
+        try:
+            from kirara_ai.plugins.group_world_state.memory_inject import clip_memory_entry_text
+        except Exception:
+            return content or ""
+    return clip_memory_entry_text(content)
+
+
 class DefaultMemoryDecomposer(MemoryDecomposer):
     def decompose(self, entries: List[MemoryEntry]) -> List[ComposableMessageType]:
         if len(entries) == 0:
             return [self.empty_message]
 
-        # 只注入当天记录；跨自然日的闲聊已经翻篇。
-        today_entries = _today_memory_entries(entries)[-10:]
+        # 只注入当天记录；跨自然日的闲聊已经翻篇。去重截短，避免同一句喂两遍。
+        today_entries = _compact_today_entries(entries)
         if not today_entries:
             return [self.empty_message]
         memory_texts: List[ComposableMessageType] = []
         for entry in today_entries:
             time_diff = datetime.now() - entry.timestamp
             time_str = self.get_time_str(time_diff)
-            memory_texts.append(f"{time_str}，{entry.content}")
+            memory_texts.append(f"{time_str}，{_clip_entry_content(entry.content)}")
 
         return memory_texts
 
@@ -146,12 +169,13 @@ class MultiElementDecomposer(MemoryDecomposer):
     
     def decompose(self, entries: List[MemoryEntry]) -> List[LLMChatMessage]:
         decomposed_messages = []
-        for entry in _today_memory_entries(entries):
+        for entry in _compact_today_entries(entries):
+            content = _clip_entry_content(entry.content)
             # 首先判断MemoryEntry的内容是否包含"你回答:"
-            if "你回答:" in entry.content:
+            if "你回答:" in content:
                 # 如果包含，则分割MemoryEntry的内容为用户消息和AI回答
-                user_content = entry.content.split("你回答:")[0].strip()
-                assistant_content = entry.content.split("你回答:")[1].strip()
+                user_content = content.split("你回答:")[0].strip()
+                assistant_content = content.split("你回答:")[1].strip()
                 # 危急场面里的冷收束口误：只留群友那句，避免下一轮继续抄鞋带/明天见
                 if _CHASE_CUE_RE.search(user_content) and _COLD_CHASE_REPLY_RE.search(
                     assistant_content
@@ -170,7 +194,7 @@ class MultiElementDecomposer(MemoryDecomposer):
                         decomposed_messages.append(assistant_message)
             else:
                 # 如果不包含"你回答:"，则全部视为用户消息
-                user_message = self.create_llm_chat_message(entry.content, "user", entry.sender)
+                user_message = self.create_llm_chat_message(content, "user", entry.sender)
                 if user_message:
                     decomposed_messages.append(user_message)
 

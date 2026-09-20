@@ -112,7 +112,18 @@ def filter_ops(ops: List[StateOp], current_text: str = "") -> List[StateOp]:
             text = (op.text or "").strip()
             if is_forbidden(text) or not text:
                 continue
+            try:
+                from .day_rollover import sanitize_longterm_text
+
+                cleaned = sanitize_longterm_text(key, text)
+                if key in ("relationship", "plot") or key.startswith("nickname_"):
+                    if not cleaned:
+                        continue
+                    text = cleaned
+            except Exception:
+                pass
             if text in current:
+                continue
                 continue
             if is_regression(key, text, current):
                 continue
@@ -126,7 +137,10 @@ def filter_ops(ops: List[StateOp], current_text: str = "") -> List[StateOp]:
 EXTRACT_SYSTEM = """你是静默书记官，不是角色。根据这一轮用户发言和角色回复，判断这边长期设定有没有真正变化。
 只记录已经发生、之后还应该记住的事实。
 不要把玩笑、假设、未答应的请求写成既定事实。
-出门、吃饭、逛街、当天约定写入 promise；已经做完的写成过去式。这类事过了自然日就不再算进行中。
+出门、吃饭、逛街、当天约定只写入 promise，写成「哪天做什么」；已经做完的写成过去式。过了自然日就不再算进行中。
+禁止把出门、吃饭、可丽饼店、明天约会写进 relationship / nickname / plot。
+relationship 只写关系状态（告白、交往、亲密度），不要附带行程。
+plot 只写尚未完成的长期事件（例如婚纱照），不要写当天或明天去哪吃饭。
 同伴（爱音↔素世）互聊里要更积极：
 - 一方明确告白，另一方没有拒绝（含害羞接受、嘴硬承认、「知道了」「也不是不行」「……随你」），记为关系进展。
 - 双方都说喜欢、确认交往、答应在一起、心照不宣地承认互相在意，要大胆记下。

@@ -177,25 +177,30 @@ class PeerInboundMatchRule(DispatchRule):
         try:
             from group_world_state.characters import character_by_qq, peer_qq
             from group_world_state.peer import PeerChainStore
+            from group_world_state.voice_text import has_voice, is_tts_caption, is_voice_only
         except Exception:
             return False
 
         sender_qq = str(message.sender.user_id or "")
         if not sender_qq or sender_qq != peer_qq(self.character):
             return False
+        if is_voice_only(message) or has_voice(message):
+            return False
 
         try:
-            from group_world_state.mentions import addressed_to_self, mentioned_others
+            from group_world_state.mentions import addressed_to_self, mentioned_bot, mentioned_others
 
             if mentioned_others(message, self.character) and not addressed_to_self(
                 message, self.character
             ):
                 return False
-            mentioned = addressed_to_self(message, self.character)
+            mentioned = mentioned_bot(message, self.character)
         except Exception:
             mentioned = False
 
         text = message.content or ""
+        if is_tts_caption(text):
+            return False
         from group_world_state.characters import aliases as char_aliases
         from group_world_state.peer import alias_hit, looks_addressed_to_self
 
@@ -203,18 +208,20 @@ class PeerInboundMatchRule(DispatchRule):
         if not named:
             # 同伴号提到本名就算入站。人类「提到」仍走 vocative；Bot 互聊不能要求 soyorin——。
             named = any(alias_hit(text, a) for a in char_aliases(self.character) if a)
-        if mentioned or named:
-            return True
 
         group_id = message.sender.group_id
         if not group_id:
-            return False
+            return bool(mentioned or named)
         try:
             store = PeerChainStore(__import__("pathlib").Path("data/world_state/_peer_chains"))
             allowed, _ = store.should_continue(group_id, self.character)
+            if not allowed:
+                return False
+            if mentioned or named:
+                return True
             last = store.last_speaker(group_id)
             peer_cid = character_by_qq(sender_qq)
-            return bool(allowed and peer_cid and last == peer_cid)
+            return bool(peer_cid and last == peer_cid)
         except Exception:
             return False
 

@@ -87,6 +87,7 @@ report = format_chat_token_report(
 check("chat 拆分含 character=soyo", "character=soyo" in report)
 check("chat 拆分含本轮.user", "本轮.user 消耗了" in report)
 check("chat 拆分含 API 行", "prompt 消耗了 100 token" in report)
+check("chat 拆分含摘要行", "token 摘要" in report and "历史=" in report and "人设=" in report)
 
 chat_py = (ROOT / "patches/llm_chat.py").read_text(encoding="utf-8")
 adapter = (ROOT / "patches/openai_adapter.py").read_text(encoding="utf-8")

@@ -114,6 +114,14 @@ class PeerChainStore:
             until = _parse(doc.get("cooldown_until") or "")
             if until and until > _now():
                 return False, "同伴互聊冷却中，本轮别主动找同伴开口，专注回眼前的人。"
+            updated = _parse(doc.get("updated_at") or "")
+            rounds = int(doc.get("rounds") or 0)
+            if updated and (_now() - updated).total_seconds() > ttl:
+                doc["rounds"] = 0
+                doc["last_speaker"] = ""
+                rounds = 0
+            if rounds >= max_rounds:
+                return False, "同伴互聊已够，自然收束，别再抛新话题。"
             scene_until = _parse(doc.get("scene_until") or "")
             scene = str(doc.get("scene") or "")
             if scene_until and scene_until > _now() and scene == "anon_chasing_soyo":
@@ -126,14 +134,6 @@ class PeerChainStore:
                     "你在追 soyorin。对面就是她，「你」=她。"
                     "鞋带散了是你自己的。禁止说「你比soyorin跑得快」。"
                 )
-            updated = _parse(doc.get("updated_at") or "")
-            rounds = int(doc.get("rounds") or 0)
-            if updated and (_now() - updated).total_seconds() > ttl:
-                doc["rounds"] = 0
-                doc["last_speaker"] = ""
-                rounds = 0
-            if rounds >= max_rounds:
-                return False, "同伴互聊已够，自然收束，别再抛新话题。"
             remain = max_rounds - rounds
             if remain <= 1:
                 if character_id == "soyo":
@@ -160,6 +160,9 @@ class PeerChainStore:
         cool = int(cfg.get("cooldown_seconds") or 180)
         with _lock:
             doc = self._read(group_id)
+            until = _parse(doc.get("cooldown_until") or "")
+            if until and until > _now():
+                return
             last = doc.get("last_speaker") or ""
             rounds = int(doc.get("rounds") or 0)
             if last and last != character_id:
@@ -223,9 +226,7 @@ def looks_like_wrap_up(text: str) -> bool:
 
 
 def peer_should_discard(*, allowed: bool, wrap_up: bool, at_self: bool) -> bool:
-    """文字点名/引用回复不能续摊；只有真正的 @ 才能打断收束或轮次上限。"""
-    if at_self:
-        return False
+    """同伴互聊触顶/收束必须停。互相点名或 @ 也不能续摊，否则会停不下来。"""
     return wrap_up or (not allowed)
 
 

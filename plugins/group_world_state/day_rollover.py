@@ -15,6 +15,11 @@ DONE_RE = re.compile(
     r"回来了|到家了|结束了|吃完|玩完|看完|做过)"
 )
 CROSS_DAY_PREFIX_RE = re.compile(r"^\s*\d+\s*天前")
+OUTING_RE = re.compile(
+    r"(可丽饼|克丽饼|クレープ|甜品店|蛋糕店|鲜奶油|挤奶油|"
+    r"明天[早中下]?[午晚]?|今晚|今夜|今早|"
+    r"一起去|赴约|占座|靠窗|到店|去店)"
+)
 
 
 def now_cst(now: Optional[datetime] = None) -> datetime:
@@ -66,6 +71,39 @@ def looks_done(text: str) -> bool:
     return bool(DONE_RE.search(text or ""))
 
 
+def is_outing_text(text: str) -> bool:
+    return bool(OUTING_RE.search(text or ""))
+
+
+def is_ephemeral_outing(key: str, text: str = "") -> bool:
+    """出门/吃饭/可丽饼这类日程，不能写进长期关系里反复续。"""
+    k = (key or "").strip().lower()
+    if k.startswith("promise"):
+        return True
+    if REL_PLOT_RE.search(text or "") and not is_outing_text(text):
+        return False
+    return is_outing_text(text)
+
+
+def split_clauses(text: str) -> List[str]:
+    return [p.strip(" ，,") for p in re.split(r"[；;。]", text or "") if p.strip(" ，,")]
+
+
+def strip_outing_clauses(text: str) -> str:
+    kept = [c for c in split_clauses(text) if not is_outing_text(c)]
+    return "；".join(kept).strip()
+
+
+def sanitize_longterm_text(key: str, text: str) -> str:
+    k = (key or "").strip().lower()
+    if k == "relationship" or k.startswith("nickname_"):
+        return strip_outing_clauses(text)
+    if k == "plot":
+        stripped = strip_outing_clauses(text)
+        return stripped
+    return (text or "").strip()
+
+
 def classify_fact(
     fact: dict,
     now: Optional[datetime] = None,
@@ -107,6 +145,10 @@ def split_facts(
     return sticky, open_now, closed[:4]
 
 
+def _fact_line(fact: dict, text: str) -> str:
+    return f"- {fact.get('key')}: {text.strip()}"
+
+
 def render_fact_sections(
     facts: Sequence[dict],
     empty_fallback: str,
@@ -114,20 +156,49 @@ def render_fact_sections(
 ) -> str:
     sticky, open_now, closed = split_facts(facts, now)
     parts: List[str] = []
-    if sticky:
-        parts.append(
-            "【本群已经发生、必须当作既定事实】\n"
-            + "\n".join(f"- {f.get('key')}: {(f.get('text') or '').strip()}" for f in sticky)
-        )
-    if open_now:
-        parts.append(
-            "【今天还在进行的约定】\n"
-            + "\n".join(f"- {f.get('key')}: {(f.get('text') or '').strip()}" for f in open_now)
-        )
-    if closed:
+    sticky_lines: List[str] = []
+    for fact in sticky:
+        key = str(fact.get("key") or "note")
+        text = sanitize_longterm_text(key, str(fact.get("text") or ""))
+        if not text:
+            continue
+        sticky_lines.append(_fact_line(fact, text))
+    if sticky_lines:
+        parts.append("【本群已经发生、必须当作既定事实】\n" + "\n".join(sticky_lines))
+    open_lines: List[str] = []
+    for fact in open_now:
+        key = str(fact.get("key") or "note")
+        text = str(fact.get("text") or "").strip()
+        if key == "plot":
+            text = strip_outing_clauses(text)
+            if not text:
+                continue
+        elif is_ephemeral_outing(key, text) and not is_same_civil_day(
+            fact.get("updated_at"), now
+        ):
+            continue
+        open_lines.append(_fact_line(fact, text))
+    if open_lines:
+        parts.append("【今天还在进行的约定】\n" + "\n".join(open_lines))
+    # 过期出门/吃饭不要点名写进提示词，否则模型会自己续摊。
+    closed_lines: List[str] = []
+    dropped_outing = False
+    for fact in closed:
+        key = str(fact.get("key") or "note")
+        text = str(fact.get("text") or "").strip()
+        if is_ephemeral_outing(key, text):
+            dropped_outing = True
+            continue
+        closed_lines.append(_fact_line(fact, text))
+    if closed_lines:
         parts.append(
             "【已翻篇的近事（除非对方这句明确提起，否则不要续、不要约、不要当还没做完）】\n"
-            + "\n".join(f"- {f.get('key')}: {(f.get('text') or '').strip()}" for f in closed)
+            + "\n".join(closed_lines)
+        )
+    elif dropped_outing:
+        parts.append(
+            "【已翻篇】昨天及更早的出门、吃饭、逛街约定已经结束。"
+            "对方这句没有明确提起就不要续、不要再约。"
         )
     if not parts:
         return empty_fallback

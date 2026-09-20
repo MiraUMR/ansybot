@@ -57,7 +57,7 @@ from .peer import (
 )
 from .scene_context import SceneContextStore
 from .store import WorldStateStore, empty_text_for, scope_id
-from .voice_text import is_voice_only, strip_voice_message
+from .voice_text import is_voice_bar_event, is_voice_only, spoken_text, strip_voice_message
 from .story import (
     StorySessionStore,
     display_of,
@@ -676,14 +676,17 @@ class ExtractUserWorldState(Block):
         self.logger = get_logger("WorldState.ExtractUser")
 
     def execute(self, chat_sender: ChatSender, user_msg: IMMessage) -> Dict[str, Any]:
-        from .characters import is_registered_bot_qq
+        from .characters import classify_sender_qq
 
         character = _character_of(self.character, chat_sender)
         user_text = user_msg.content or ""
         qq = sender_qq_of(chat_sender, user_msg)
         mentioned = addressed_to_self(user_msg, character)
-        # 人类未 @本账号 / 非登记 Bot：不抽取关系，避免环境旁白污染
-        if not is_registered_bot_qq(qq) and not mentioned:
+        kind = classify_sender_qq(character, qq)
+        # 自己的回声不抽取；人类未 @本账号 / 非同伴：不抽取关系
+        if kind == "self":
+            return {}
+        if kind != "peer" and not mentioned:
             return {}
         if not should_extract(user_text, "", always=False):
             return {}
@@ -1136,18 +1139,23 @@ class FilterFallbackMemory(Block):
         self.character = (character or "anon").strip() or "anon"
 
     def execute(self, user_msg: IMMessage) -> Dict[str, Any]:
-        from .characters import is_registered_bot_qq
+        from .characters import classify_sender_qq
 
         sender = user_msg.sender
         character = _character_of(self.character, sender)
         qq = sender_qq_of(sender, user_msg)
         mentioned = addressed_to_self(user_msg, character)
-        if is_registered_bot_qq(qq) or mentioned:
-            if is_voice_only(user_msg):
-                empty = IMMessage(sender=sender, message_elements=[])
+        kind = classify_sender_qq(character, qq)
+        empty = IMMessage(sender=sender, message_elements=[])
+        # 自己的 NapCat 回声不要再写成「xxx 说:」，否则会和「你回答」重复进提示词。
+        if kind == "self":
+            return {"user_msg": empty, "skip_chat_memory": "true"}
+        if is_voice_bar_event(user_msg):
+            return {"user_msg": empty, "skip_chat_memory": "true"}
+        if kind == "peer" or mentioned:
+            if is_voice_only(user_msg) or not spoken_text(user_msg):
                 return {"user_msg": empty, "skip_chat_memory": "true"}
             return {"user_msg": strip_voice_message(user_msg), "skip_chat_memory": "false"}
-        empty = IMMessage(sender=sender, message_elements=[])
         return {"user_msg": empty, "skip_chat_memory": "true"}
 
 
@@ -1184,8 +1192,9 @@ class GateMemoryByMode(Block):
         if memory_content is None:
             return {"memory_content": []}
         from .day_rollover import keep_today_memory
+        from .memory_inject import compact_memory_content
 
-        return {"memory_content": keep_today_memory(memory_content)}
+        return {"memory_content": compact_memory_content(keep_today_memory(memory_content))}
 
 
 MENTION_CHANCE = 0.12
@@ -2294,8 +2303,8 @@ class DialogueContext(Block):
         def finish(bundle: Dict[str, Any], src: str = content) -> Dict[str, Any]:
             return _with_critical(character, bundle, src, group_id=gid)
 
-        if is_voice_only(user_msg, content):
-            self.logger.info(f"dialogue {character} mode=discard reason=voice_only")
+        if is_voice_bar_event(user_msg, content):
+            self.logger.info(f"dialogue {character} mode=discard reason=voice_bar")
             return finish(_no_reply_bundle("忽略语音条"))
 
         story_hit = self._route_story_mode(

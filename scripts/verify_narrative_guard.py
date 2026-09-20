@@ -312,8 +312,8 @@ check(
     peer_mod.peer_should_discard(allowed=False, wrap_up=False, at_self=False),
 )
 check(
-    "真正@可续",
-    not peer_mod.peer_should_discard(allowed=False, wrap_up=True, at_self=True),
+    "同伴@也不能续摊",
+    peer_mod.peer_should_discard(allowed=False, wrap_up=True, at_self=True),
 )
 
 # --- 群员屏蔽（沉浸）---

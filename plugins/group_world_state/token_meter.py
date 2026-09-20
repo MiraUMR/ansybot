@@ -307,6 +307,32 @@ def format_static_modules(entries: Sequence[Tuple[str, str]]) -> str:
     return header + "\n  " + "\n  ".join(lines)
 
 
+def _bucket_name(name: str) -> str:
+    label = name or ""
+    if label.startswith("近期聊天") or label.startswith("历史."):
+        return "历史"
+    if label.startswith("本轮."):
+        return "本轮"
+    if label.startswith("人设.") or label in ("本群长期关系", "当下", "当前信息", "回复规则"):
+        return "人设"
+    return "其他"
+
+
+def format_bucket_summary(parts: Sequence[Tuple[str, str]], total: int = 0) -> str:
+    buckets = {"人设": 0, "历史": 0, "本轮": 0, "其他": 0}
+    for name, body in parts:
+        buckets[_bucket_name(name)] += estimate_tokens(body)
+    denom = total or sum(buckets.values()) or 1
+    bits = []
+    for key in ("人设", "历史", "本轮", "其他"):
+        tok = buckets[key]
+        if key == "其他" and tok <= 0:
+            continue
+        pct = 100.0 * tok / denom
+        bits.append(f"{key}={tok}({pct:.0f}%)")
+    return "token 摘要 " + " ".join(bits)
+
+
 def format_chat_token_report(
     messages: Sequence[Any],
     *,
@@ -376,6 +402,7 @@ def format_chat_token_report(
         header += f" 另有 image×{images}（视觉 token 以上游 API 为准）"
     chunks = [header, api_line]
     if lines:
+        chunks.append("  " + format_bucket_summary(named, est_total))
         chunks.append("  " + "\n  ".join(lines))
     return "\n".join(chunks)
 

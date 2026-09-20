@@ -6,6 +6,8 @@ from typing import Any, List, Optional
 
 _VOICE_PLAIN = re.compile(r"\[(?:语音|语音消息|语音条)[^\]]*\]|\[CQ:record[^\]]*\]", re.I)
 _HAN_KANA = re.compile(r"[\u4e00-\u9fffA-Za-z0-9ぁ-んァ-ン]")
+_JA_KANA = re.compile(r"[\u3040-\u30ff]")
+_ZH_HAN = re.compile(r"[\u4e00-\u9fff]")
 
 
 def _type_name(el: Any) -> str:
@@ -65,11 +67,29 @@ def spoken_text(msg: Any, content: Optional[str] = None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def is_voice_only(msg: Any, content: Optional[str] = None) -> bool:
-    text = spoken_text(msg, content)
-    if _HAN_KANA.search(text):
+def is_tts_caption(text: str) -> bool:
+    """带假名的合成日文：群里互聊只发中文，这类文案不当新的一句。"""
+    t = _VOICE_PLAIN.sub(" ", (text or "")).strip()
+    if not t:
         return False
-    return has_voice(msg) or bool(_VOICE_PLAIN.search(str(content or getattr(msg, "content", "") or "")))
+    return bool(_JA_KANA.search(t))
+
+
+def is_voice_bar_event(msg: Any, content: Optional[str] = None) -> bool:
+    """语音条不是一条新消息：它和前面那句中文是同一轮，不调度、不计数、不入库。"""
+    text = spoken_text(msg, content)
+    if has_voice(msg):
+        if text and _ZH_HAN.search(text) and not is_tts_caption(text):
+            return False
+        return True
+    if is_tts_caption(text):
+        return True
+    raw = str(content if content is not None else getattr(msg, "content", "") or "")
+    return bool(_VOICE_PLAIN.search(raw) and not _ZH_HAN.search(raw))
+
+
+def is_voice_only(msg: Any, content: Optional[str] = None) -> bool:
+    return is_voice_bar_event(msg, content)
 
 
 def strip_voice_message(msg: Any) -> Any:

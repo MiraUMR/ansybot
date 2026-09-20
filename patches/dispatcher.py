@@ -51,8 +51,20 @@ class WorkflowDispatcher:
             self.logger.debug(f"stamp im_name failed: {exc}")
         return im_name
 
+    def _is_voice_bar(self, message: IMMessage) -> bool:
+        try:
+            from group_world_state.voice_text import is_voice_bar_event
+
+            return bool(is_voice_bar_event(message))
+        except Exception as exc:
+            self.logger.debug(f"voice bar check failed: {exc}")
+            return False
+
     async def dispatch(self, source: IMAdapter, message: IMMessage):
         im_name = self._stamp_im_name(source, message)
+        if self._is_voice_bar(message):
+            self.logger.debug(f"skip voice bar im={im_name} (not a message)")
+            return None
         active_rules = self.dispatch_registry.get_active_rules()
 
         for rule in active_rules:

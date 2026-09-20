@@ -46,6 +46,16 @@ _ZH_LEFT = re.compile(
     r"嘿嘿+|哈哈+|诶+|嗯嗯|哦哦|"
     r"[聽发们这这您啥嘿吗嘛啦]"
 )
+_LAUGH_RE = re.compile(
+    r"(?:あ+っ?はは+|わはは+|ははは+|えへへ+|うふふ+|ふふふ+|ひひひ+|"
+    r"あっはっは+|aha+|haha+|hehe+|ww+|ｗｗ+)",
+    re.I,
+)
+_KATA_ANON = re.compile(r"アノン(?:[・\s-]?(?:チャン|ちゃん))?", re.I)
+_KATA_SOYO = re.compile(r"ソヨリン")
+_LAUGH_THEN_NAME = re.compile(
+    r"(えへっ|あはっ|ふふっ|わはっ)[ー~～]*[、,]*\s*(あのんちゃん|そよりん)"
+)
 _JP_SHARED = {
     "突然",
     "明日",
@@ -271,11 +281,36 @@ def clip_to_japanese(clip: str, character: str) -> str:
     return normalize_ja_for_tts("、".join(bits))
 
 
+def stabilize_ja_laugh(text: str) -> str:
+    """长串笑声在 SoVITS 里容易破音，收成带促音的短笑。"""
+
+    def _one(match: re.Match) -> str:
+        raw = match.group(0) or ""
+        low = raw.lower()
+        if "えへ" in raw or "hehe" in low:
+            return "えへっ"
+        if "うふ" in raw or "ふふ" in raw:
+            return "ふふっ"
+        if "わは" in raw:
+            return "わはっ"
+        return "あはっ"
+
+    t = _LAUGH_RE.sub(_one, text or "")
+    t = re.sub(r"嘿嘿+", "えへっ", t)
+    t = re.sub(r"哈哈+|呵+", "あはっ", t)
+    t = _LAUGH_THEN_NAME.sub(r"\1、\2", t)
+    t = re.sub(r"(えへっ|あはっ|ふふっ|わはっ)ー+", r"\1", t)
+    return t
+
+
 def lock_character_names(text: str) -> str:
-    """语音日文里人名固定罗马音：爱音→anon chan，素世→soyorin。"""
+    """语音日文里人名固定假名：爱音→あのんちゃん，素世→そよりん。罗马音在 all_ja 下会破音。"""
     t = text or ""
-    t = _ANON_NAME.sub("anon chan", t)
-    t = _SOYO_NAME.sub("soyorin", t)
+    t = _KATA_ANON.sub("あのんちゃん", t)
+    t = _KATA_SOYO.sub("そよりん", t)
+    t = _ANON_NAME.sub("あのんちゃん", t)
+    t = _SOYO_NAME.sub("そよりん", t)
+    t = re.sub(r"anon\s*chan", "あのんちゃん", t, flags=re.I)
     return t
 
 
@@ -299,17 +334,29 @@ def is_spoken_japanese(text: str, zh: str = "") -> bool:
     if _KANA.search(t):
         return True
     low = t.lower()
-    return "anon chan" in low or "anonchan" in low or "soyorin" in low
+    return (
+        "あのんちゃん" in t
+        or "そよりん" in t
+        or "anon chan" in low
+        or "anonchan" in low
+        or "soyorin" in low
+    )
 
 
 def normalize_ja_for_tts(text: str) -> str:
-    """给 GPT-SoVITS 的日文：拉长音、补句号，减少吞字。拉丁称呼中间的空格要留。"""
-    t = lock_character_names((text or "").strip().strip("\"'`「」『』"))
+    """给 GPT-SoVITS 的日文：假名称呼、短笑声、拉长音。罗马音和长串はは会破音。"""
+    t = (text or "").strip().strip("\"'`「」『』")
+    t = stabilize_ja_laugh(t)
+    t = lock_character_names(t)
+    t = stabilize_ja_laugh(t)
     t = t.replace("～", "ー").replace("~", "ー")
     t = t.replace("……", "、").replace("…", "、")
     t = t.replace("——", "、").replace("—", "、")
+    t = re.sub(r"ー{2,}", "ー", t)
+    t = re.sub(r"(えへっ|あはっ|ふふっ|わはっ)ー+", r"\1", t)
     t = re.sub(r"\s+", " ", t).strip()
     t = re.sub(r"(?<![A-Za-z]) (?![A-Za-z])", "", t)
+    t = _LAUGH_THEN_NAME.sub(r"\1、\2", t)
     if t and t[-1] not in "。！？!?":
         t += "。"
     return t
