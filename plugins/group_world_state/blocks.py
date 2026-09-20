@@ -57,6 +57,7 @@ from .peer import (
 )
 from .scene_context import SceneContextStore
 from .store import WorldStateStore, empty_text_for, scope_id
+from .voice_text import is_voice_only, strip_voice_message
 from .story import (
     StorySessionStore,
     display_of,
@@ -1073,6 +1074,11 @@ class GatedChatMemoryStore(Block):
         if skip:
             self.logger.debug("skip chat memory for env/discard turn")
             return {}
+        if user_msg is not None:
+            if is_voice_only(user_msg):
+                self.logger.debug("skip chat memory for voice-only turn")
+                return {}
+            user_msg = strip_voice_message(user_msg)
         if llm_resp is not None:
             text = _assistant_text(llm_resp).strip()
             if not text or text == "[NO_REPLY]":
@@ -1137,7 +1143,10 @@ class FilterFallbackMemory(Block):
         qq = sender_qq_of(sender, user_msg)
         mentioned = addressed_to_self(user_msg, character)
         if is_registered_bot_qq(qq) or mentioned:
-            return {"user_msg": user_msg, "skip_chat_memory": "false"}
+            if is_voice_only(user_msg):
+                empty = IMMessage(sender=sender, message_elements=[])
+                return {"user_msg": empty, "skip_chat_memory": "true"}
+            return {"user_msg": strip_voice_message(user_msg), "skip_chat_memory": "false"}
         empty = IMMessage(sender=sender, message_elements=[])
         return {"user_msg": empty, "skip_chat_memory": "true"}
 
@@ -2284,6 +2293,10 @@ class DialogueContext(Block):
 
         def finish(bundle: Dict[str, Any], src: str = content) -> Dict[str, Any]:
             return _with_critical(character, bundle, src, group_id=gid)
+
+        if is_voice_only(user_msg, content):
+            self.logger.info(f"dialogue {character} mode=discard reason=voice_only")
+            return finish(_no_reply_bundle("忽略语音条"))
 
         story_hit = self._route_story_mode(
             chat_sender, user_msg, character, content, mentioned, group_name

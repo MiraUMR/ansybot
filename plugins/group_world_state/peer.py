@@ -236,7 +236,8 @@ _SCENE_HINT = re.compile(
 _ASCII_ALIAS = re.compile(r"^[A-Za-z0-9_]+$")
 # 「你/在吗/帮我」这类才算真的在跟角色说话，只是提到名字不算。
 _ADDRESS_HINT = re.compile(r"(你|您|在吗|在不在|来一下|帮我|教我|求你|怎么看|觉得呢)")
-_NAME_SEP = "，,、：:！!？?…~～ \t　"
+# 爱音常用 soyorin——／小爱音～ 这种拖长，必须算当面叫人。
+_NAME_SEP = "，,、：:！!？?…~～—–―－ー- \t　"
 
 
 def alias_hit(text: str, alias: str) -> bool:
@@ -250,7 +251,7 @@ def alias_hit(text: str, alias: str) -> bool:
     return a in (text or "")
 
 
-_VOCATIVE_SEP = "，,、：:！!？?…"
+_VOCATIVE_SEP = "，,、：:！!？?…~～—–―－ー-"
 
 
 def looks_vocative_to(text: str, character_id: str) -> bool:

@@ -196,9 +196,13 @@ class PeerInboundMatchRule(DispatchRule):
             mentioned = False
 
         text = message.content or ""
-        from group_world_state.peer import looks_addressed_to_self
+        from group_world_state.characters import aliases as char_aliases
+        from group_world_state.peer import alias_hit, looks_addressed_to_self
 
         named = looks_addressed_to_self(text, self.character)
+        if not named:
+            # 同伴号提到本名就算入站。人类「提到」仍走 vocative；Bot 互聊不能要求 soyorin——。
+            named = any(alias_hit(text, a) for a in char_aliases(self.character) if a)
         if mentioned or named:
             return True
 

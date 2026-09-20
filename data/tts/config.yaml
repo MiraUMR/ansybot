@@ -9,3 +9,10 @@ min_chars: 1
 # 本轮第一条按语义切开，译成日文后再送 GPT-SoVITS
 convert_ja: true
 max_sentences: 1
+# 切片+翻译走硅基流动；密钥只读环境变量 SILICONFLOW_API_KEY
+translate:
+  provider: siliconflow
+  api_base: https://api.siliconflow.cn/v1
+  model: Qwen/Qwen2.5-72B-Instruct
+  timeout_seconds: 60
+  max_tokens: 220

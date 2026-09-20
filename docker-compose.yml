@@ -8,6 +8,7 @@ services:
     environment:
       STORY_HMAC_SECRET: ${STORY_HMAC_SECRET:-dev-story-hmac-change-me}
       CHARACTER_TTS_URL: ${CHARACTER_TTS_URL:-http://character-tts:8020}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

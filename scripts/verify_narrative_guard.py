@@ -337,6 +337,11 @@ check(
     not peer_mod.looks_addressed_to_self("前面蹲着摸猫的绝对是soyorin。", "soyo"),
 )
 check(
+    "拖长音点名算叫人",
+    peer_mod.looks_addressed_to_self("soyorin——！中午要不要一起出去逛逛嘛", "soyo")
+    and peer_mod.looks_vocative_to("soyorin——！出去逛逛", "soyo"),
+)
+check(
     "英文别名要词边界",
     not peer_mod.alias_hit("canon 这首好听", "anon")
     and peer_mod.alias_hit("anon 在吗", "anon"),
@@ -376,6 +381,7 @@ check("reply 默认不算回 bot", "只有能确认引用对象是本账号" in 
 DISPATCH = (ROOT / "patches/dispatch_message_rules.py").read_text(encoding="utf-8")
 check("dispatch 注册 not_at_others", 'type_name = "not_at_others"' in DISPATCH)
 check("peer 点名要 vocative", "named = looks_addressed_to_self(text, self.character)" in DISPATCH)
+check("同伴提到本名也入站", "alias_hit(text, a)" in DISPATCH)
 check("/chat 优先于 @别人", "if force_chat or not is_group:" in BLOCKS)
 check("gate_memory 模块已注册", "gate_memory" in INIT and "class GateMemoryByMode" in BLOCKS)
 RULES = yaml.safe_load((ROOT / "data/dispatch_rules/rules.yaml").read_text(encoding="utf-8"))

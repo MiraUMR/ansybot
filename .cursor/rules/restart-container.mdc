@@ -8,4 +8,5 @@ After changing runtime code, persona YAML, workflows, or other files the live bo
 - Server: `root@<SERVER_IP>`, project `<PROJECT_DIR>`
 - Upload changed files, then `docker compose up -d --force-recreate --no-deps kirara-agent` in `<PROJECT_DIR>`
 - Confirm `kirara-qq-bot` is up and the Anon / Soyo NapCat accounts from `data/characters.yaml` are connected
+- Recreating Kirara drops the Windows GPT-SoVITS reverse tunnel. After deploy, kill the stale `127.0.0.1:8021` sshd bind on the server, then restart `ssh -i %USERPROFILE%\.ssh\ansy_deploy -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -R 8021:127.0.0.1:8021 root@38.22.235.136` from this PC. Confirm local `:8021` and the server bind are both up.
 - Do not restart only for local-only notes, or if the user explicitly says not to restart

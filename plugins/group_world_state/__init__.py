@@ -96,7 +96,7 @@ class GroupWorldStatePlugin(Plugin):
             ("gate_memory", GateMemoryByMode, "记忆：按模式过滤查询结果"),
             ("manage", ManageWorldState, "长期记忆：管理命令"),
             ("host_dialogue", HostDialogue, "故事主持人：开场/结束"),
-            ("attach_voice", AttachCharacterVoice, "声替：给回复附加角色语音"),
+            ("attach_voice", AttachCharacterVoice, "声替：文字先发，语音后台另发"),
         ):
             full = f"world_state:{block_id}"
             if self.block_registry.get(full) is None:

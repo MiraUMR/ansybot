@@ -29,6 +29,35 @@ _FILLER_CORE = re.compile(r"^(唔+|嗯+|啊+|诶+|哦+|哈+|额+|呃+|唉+|明�
 _LEAD_MARK = re.compile(r"^(其实|不过|就是|反正|然后)")
 _DASH = re.compile(r"[—–\-－]{1,2}")
 _REACT_END = re.compile(r"(啦|啊|呀|呢|吧|哦|诶)[！!？?]*$")
+_ANON_NAME = re.compile(
+    r"千早爱音|小爱音|爱音ちゃん|爱音|"
+    r"あのんちゃん|あのん|"
+    r"anon[\s\-]*chan|anonchan|\banon\b",
+    re.I,
+)
+_SOYO_NAME = re.compile(
+    r"长崎素世|素世世|素世|"
+    r"そよりん|(?<![ぁ-んァ-ン])そよ(?![ぁ-んァ-ン])|"
+    r"soyorin|\bsoyo\b",
+    re.I,
+)
+_ZH_LEFT = re.compile(
+    r"什么|怎么|这样啊|语音|听到|顺耳|太想|闲着|发语音|"
+    r"嘿嘿+|哈哈+|诶+|嗯嗯|哦哦|"
+    r"[聽发们这这您啥嘿吗嘛啦]"
+)
+_JP_SHARED = {
+    "突然",
+    "明日",
+    "今日",
+    "一緒",
+    "本当",
+    "大丈夫",
+    "時間",
+    "今",
+    "声",
+    "名前",
+}
 
 _cache: Dict[str, object] = {"mtime": None, "data": None}
 
@@ -107,6 +136,28 @@ def _sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+def _is_name_callout(sent: str) -> bool:
+    """「soyorin——！」只是叫人，语音切下一句。"""
+    core = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9ぁ-んァ-ン]", "", sent or "")
+    if not core or len(core) > 12:
+        return False
+    names = (
+        "soyorin",
+        "soyo",
+        "anon",
+        "anonrin",
+        "小爱音",
+        "爱音",
+        "素世",
+        "素世世",
+        "长崎素世",
+        "千早爱音",
+        "あのん",
+        "そよ",
+    )
+    return core.lower() in {n.lower() for n in names}
+
+
 def _is_reaction(sent: str) -> bool:
     s = (sent or "").strip()
     if not s or _core_len(s) > 16:
@@ -152,13 +203,17 @@ def first_voice_clip(text: str) -> str:
     para = _first_paragraph(text)
     if not para:
         return ""
-    sents = _sentences(para)
+    sents = [s for s in _sentences(para) if _core_len(s) > 0]
     if len(sents) >= 2 and _is_reaction(sents[0]):
-        sents = sents[1:]
-    sent = (sents[0] if sents else para).strip()
+        sents = [sents[0].rstrip() + sents[1]] + sents[2:]
+    if len(sents) >= 2 and _is_name_callout(sents[0]):
+        sents = [sents[0].rstrip("！!?。 ") + "，" + sents[1]] + sents[2:]
+    if not sents:
+        rest = (text or "").replace("\r", "\n")
+        rest = rest.split("\n", 1)[1].strip() if "\n" in rest else ""
+        return first_voice_clip(rest) if rest else ""
+    sent = sents[0].strip()
     clauses = _clauses(sent)
-    while len(clauses) > 1 and _is_filler(clauses[0]):
-        clauses = clauses[1:]
     if clauses:
         clauses[0] = _LEAD_MARK.sub("", clauses[0]).strip() or clauses[0]
     clauses = [c for c in clauses if c]
@@ -216,13 +271,45 @@ def clip_to_japanese(clip: str, character: str) -> str:
     return normalize_ja_for_tts("、".join(bits))
 
 
+def lock_character_names(text: str) -> str:
+    """语音日文里人名固定罗马音：爱音→anon chan，素世→soyorin。"""
+    t = text or ""
+    t = _ANON_NAME.sub("anon chan", t)
+    t = _SOYO_NAME.sub("soyorin", t)
+    return t
+
+
+def ja_has_zh_leftover(ja: str, zh: str = "") -> bool:
+    """日文里还夹着中文词，就不能送 TTS。"""
+    t = ja or ""
+    if not t:
+        return False
+    if _ZH_LEFT.search(t):
+        return True
+    for m in re.findall(r"[\u4e00-\u9fff]{2,}", zh or ""):
+        if m in t and m not in _JP_SHARED:
+            return True
+    return False
+
+
+def is_spoken_japanese(text: str, zh: str = "") -> bool:
+    t = (text or "").strip()
+    if not t or ja_has_zh_leftover(t, zh):
+        return False
+    if _KANA.search(t):
+        return True
+    low = t.lower()
+    return "anon chan" in low or "anonchan" in low or "soyorin" in low
+
+
 def normalize_ja_for_tts(text: str) -> str:
-    """给 GPT-SoVITS 的日文：拉长音、补句号，减少吞字。"""
-    t = (text or "").strip().strip("\"'`「」『』")
+    """给 GPT-SoVITS 的日文：拉长音、补句号，减少吞字。拉丁称呼中间的空格要留。"""
+    t = lock_character_names((text or "").strip().strip("\"'`「」『』"))
     t = t.replace("～", "ー").replace("~", "ー")
     t = t.replace("……", "、").replace("…", "、")
     t = t.replace("——", "、").replace("—", "、")
-    t = re.sub(r"\s+", "", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"(?<![A-Za-z]) (?![A-Za-z])", "", t)
     if t and t[-1] not in "。！？!?":
         t += "。"
     return t

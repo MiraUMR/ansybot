@@ -453,6 +453,13 @@ def patch_character(data: dict, character: str) -> dict:
             "llm_resp",
             "llm_resp",
         )
+        if any(b.get("name") == "attach_character_voice" for b in blocks):
+            _ensure_wire(
+                _block(blocks, "dialogue_context"),
+                "attach_character_voice",
+                "message_mode",
+                "message_mode",
+            )
 
     # send adapters
     converter = next(b for b in blocks if b.get("type") == "internal:chat_response_converter")
@@ -481,6 +488,13 @@ def patch_character(data: dict, character: str) -> dict:
             },
         )
         _ensure_wire(converter, sname, "msg", "msg")
+
+    if any(b.get("name") == "attach_character_voice" for b in blocks):
+        _ensure_wire(converter, "attach_character_voice", "msg", "msg")
+        _drop_wires_to(
+            [_block(blocks, "attach_character_voice")],
+            {names[im] for im in names},
+        )
 
     return data
 

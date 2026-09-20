@@ -66,8 +66,13 @@ class DefaultMemoryComposer(MemoryComposer):
             if isinstance(msg, IMMessage):
                 composed_message += f"{msg.sender.display_name} 说: \n"
                 for element in msg.message_elements:
+                    el_name = type(element).__name__.lower()
+                    if "voice" in el_name or "record" in el_name:
+                        continue
                     if isinstance(element, MediaMessage):
                         desc = element.get_description()
+                        if "tts" in (desc or "").lower() or "语音" in (desc or ""):
+                            continue
                         composed_message += _format_media_line(element.media_id, desc)
                         media_ids.append(element.media_id)
                     elif isinstance(element, TextMessage):

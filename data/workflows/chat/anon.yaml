@@ -106,10 +106,15 @@ blocks:
     mapping:
       from: msg
       to: msg
+  - target: SendUserBot
+    mapping:
+      from: msg
+      to: msg
   - target: attach_character_voice
     mapping:
       from: msg
       to: msg
+      extra: false
 - type: internal:text_block
   name: 本轮用户发言
   params:
@@ -403,6 +408,10 @@ blocks:
     mapping:
       from: message_mode
       to: message_mode
+  - target: attach_character_voice
+    mapping:
+      from: message_mode
+      to: message_mode
 - type: world_state:query_scene
   name: query_scene_context
   params:
@@ -485,8 +494,4 @@ blocks:
   position:
     x: 1920
     y: 220
-  connected_to:
-  - target: SendUserBot
-    mapping:
-      from: msg
-      to: msg
+  connected_to: []
